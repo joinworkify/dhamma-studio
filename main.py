@@ -1,7 +1,13 @@
-import json
 import os
+import sys
+import json
+import logging
 from pathlib import Path
 import threading
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+logging.getLogger("pywebview").setLevel(logging.CRITICAL)
+
 import mutagen
 import pandas as pd
 import pygame
@@ -17,13 +23,13 @@ except Exception:
 
 
 class BackendAPI:
-
     def __init__(self):
         self.window = None
         self.df = None
         self.csv_path = ""
         self.audios_dir = ""
         self.images_dir = ""
+        self.logo_path = ""
         self.output_video = str(BASE_DIR / "final_output.mp4")
 
     def set_window(self, window):
@@ -52,6 +58,15 @@ class BackendAPI:
             if result and len(result) > 0:
                 self.csv_path = result[0]
                 return self.load_csv_data(self.csv_path)
+        elif file_type == "logo":
+            result = self.window.create_file_dialog(
+                webview.FileDialog.OPEN,
+                allow_multiple=False,
+                file_types=("Image Files (*.png;*.jpg;*.jpeg;*.webp)", "All Files (*.*)"),
+            )
+            if result and len(result) > 0:
+                self.logo_path = result[0]
+                return {"success": True, "path": self.logo_path}
         elif file_type == "output":
             result = self.window.create_file_dialog(
                 webview.FileDialog.SAVE,
@@ -60,7 +75,6 @@ class BackendAPI:
                 file_types=("MP4 Video (*.mp4)",),
             )
             if result:
-                # Tuple သို့မဟုတ် List ဖြစ်နေပါက ပထမ element ကို ယူပေးရန်
                 path_str = result[0] if isinstance(result, (list, tuple)) else result
                 self.output_video = str(path_str)
                 return {"success": True, "path": self.output_video}
@@ -73,16 +87,12 @@ class BackendAPI:
             if "caption" not in self.df.columns or "mp3" not in self.df.columns:
                 return {
                     "success": False,
-                    "error": "CSV must contain 'caption' and 'mp3'",
+                    "error": "CSV must contain 'caption' and 'mp3' columns",
                 }
 
             records = []
             for idx, row in self.df.iterrows():
-                cap = (
-                    str(row["caption"]).strip()
-                    if str(row["caption"]) != "nan"
-                    else ""
-                )
+                cap = str(row["caption"]).strip() if str(row["caption"]) != "nan" else ""
                 mp3 = str(row["mp3"]).strip()
                 status, dur = self.check_audio_sync(mp3, cap)
                 records.append({
@@ -137,7 +147,7 @@ class BackendAPI:
             pygame.mixer.music.load(full_path)
             pygame.mixer.music.play()
             return {"success": True}
-        return {"success": False, "error": "Audio file not found"}
+        return {"success": False, "error": "Audio file not found."}
 
     def stop_audio(self):
         pygame.mixer.music.stop()
@@ -172,7 +182,7 @@ class BackendAPI:
 
     def start_video_rendering(self, config):
         if not self.images_dir or self.df is None:
-            return {"success": False, "error": "Images folder or CSV is missing."}
+            return {"success": False, "error": "Images folder or CSV data is missing."}
 
         def _worker():
             def _prog(msg, pct):
@@ -184,6 +194,7 @@ class BackendAPI:
                 self.images_dir,
                 self.get_audio_path,
                 self.output_video,
+                self.logo_path,
                 config,
                 _prog,
             )
@@ -205,10 +216,10 @@ if __name__ == "__main__":
 
     window = webview.create_window(
         title="Dhamma Studio - Video Automation",
-        url=f"file://{html_file}",
+        url=html_file.as_uri(),
         js_api=api,
-        width=1000,
-        height=780,
+        width=1120,
+        height=880,
         resizable=True,
     )
     api.set_window(window)
