@@ -1,302 +1,366 @@
 <!DOCTYPE html>
-<html lang="my">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dhamma Studio - Video Automation</title>
-  
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-    window.addEventListener('DOMContentLoaded', () => {
-        if (window.tailwind) {
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-            extend: {}
-            }
-        };
-        }
-    });
-    </script>
-
-  <!-- Google Fonts: Inter & Noto Sans Myanmar -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Myanmar:wght@400;500;600;700&display=swap" rel="stylesheet">
-
   <style>
-    /* Direct fallback colors to prevent white screen flash */
-    html, body {
-      background-color: #020617 !important;
-      color: #f1f5f9 !important;
-      font-family: 'Inter', 'Noto Sans Myanmar', 'Pyidaungsu', sans-serif;
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
+    @font-face {
+      font-family: 'NamKhone';
+      src: url('../fonts/NamKhone Grand (2).ttf'), url('../fonts/NamKhone Grand.ttf'), url('../NamKhone Grand.ttf');
     }
     .font-mm {
-      font-family: 'Noto Sans Myanmar', 'Pyidaungsu', sans-serif;
+      font-family: 'NamKhone', 'Noto Sans Myanmar', 'Pyidaungsu', sans-serif;
     }
+
+    html {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #0b0f19;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    header {
+      background-color: #111827;
+      border-bottom: 1px solid #1f2937;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .card {
+      background-color: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 18px;
+    }
+
+    .input-field, select {
+      background-color: #090d16 !important;
+      border: 1px solid #1f2937 !important;
+      color: #f3f4f6 !important;
+      padding: 10px 14px;
+      border-radius: 10px;
+      outline: none;
+      width: 100%;
+      font-size: 13px;
+    }
+
+    select, option {
+      background-color: #090d16 !important;
+      color: #f3f4f6 !important;
+    }
+
+    option:checked, option:hover {
+      background-color: #1f2937 !important;
+    }
+
+    .input-field:focus, select:focus {
+      border-color: #6366f1 !important;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .btn-primary {
+      background-color: #4f46e5;
+      color: #ffffff;
+    }
+
+    .btn-secondary {
+      background-color: #1f2937;
+      color: #e2e8f0;
+      border: 1px solid #374151;
+    }
+
+    .btn-success {
+      background-color: #059669;
+      color: #ffffff;
+    }
+
+    .btn-warning {
+      background-color: #d97706;
+      color: #ffffff;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+
     .hidden {
       display: none !important;
     }
-    select {
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-        background-color: #020617 !important;
-        color: #f1f5f9 !important;
-        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right 0.75rem center;
-        background-size: 1em;
-        padding-right: 2.5rem !important;
-    }
 
-    select option {
-        background-color: #0f172a !important;
-        color: #f1f5f9 !important;
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1f2937;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #374151;
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 flex flex-col min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
+<body>
 
-  <!-- Top Navigation Header -->
-  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-amber-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 font-bold text-white">
-          ☸
-        </div>
-        <div>
-          <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2">
-            Dhamma Studio <span class="text-xs px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-400 font-mono">v2.0</span>
-          </h1>
-          <p class="text-[11px] text-slate-400">Audio & Video Automation Suite</p>
-        </div>
+  <!-- Top Header -->
+  <header>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="background-color: #4f46e5; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">
+        ☸
       </div>
-
-      <!-- Navigation Tabs -->
-      <div class="flex bg-slate-950/70 p-1 rounded-xl border border-slate-800">
-        <button id="tab-qa-btn" onclick="switchTab('qa')" class="px-5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white shadow-sm transition">
-          1. Audio & Caption QA
-        </button>
-        <button id="tab-gen-btn" onclick="switchTab('gen')" class="px-5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
-          2. Video Generator
-        </button>
+      <div>
+        <h1 style="font-size: 15px; font-weight: bold; color: white;">Dhamma Studio</h1>
+        <p style="font-size: 11px; color: #9ca3af;">Audio QA & Video Automation</p>
       </div>
+    </div>
+    
+    <div style="background-color: #090d16; border: 1px solid #1f2937; padding: 4px; border-radius: 12px; display: flex; gap: 4px;">
+      <button id="nav-qa" onclick="switchTab('qa')" class="btn btn-primary">
+        1. Audio & Caption QA
+      </button>
+      <button id="nav-gen" onclick="switchTab('gen')" class="btn btn-secondary">
+        2. Video Generator
+      </button>
     </div>
   </header>
 
-  <!-- Main Content Area -->
-  <main class="max-w-6xl mx-auto px-6 py-6 flex-1 w-full">
+  <!-- Main Workspace -->
+  <main style="flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
 
-    <!-- TAB 1: QA SECTION -->
-    <div id="tab-qa" class="space-y-6">
-      <!-- File Pickers Grid -->
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        
-        <!-- CSV Source Card -->
-        <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:border-slate-700 transition">
-          <div class="flex items-start justify-between mb-3">
-            <div>
-              <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Data Source</span>
-              <h3 class="text-sm font-semibold text-slate-200 mt-0.5">CSV Data File</h3>
+    <!-- TAB 1: QA & Visual Styler -->
+    <div id="tab-qa" style="max-width: 1000px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+      
+      <div class="grid-2">
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="overflow: hidden; margin-right: 12px;">
+            <span style="font-size: 11px; color: #9ca3af; display: block;">CSV Dataset</span>
+            <span id="label-csv-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No CSV loaded</span>
+          </div>
+          <button onclick="browseCSV()" class="btn btn-primary" style="flex-shrink: 0;">Browse CSV</button>
+        </div>
+
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="overflow: hidden; margin-right: 12px;">
+            <span style="font-size: 11px; color: #9ca3af; display: block;">Audios Folder</span>
+            <span id="label-audios-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No folder selected</span>
+          </div>
+          <button onclick="browseAudios()" class="btn btn-secondary" style="flex-shrink: 0;">Browse Audios</button>
+        </div>
+      </div>
+
+      <!-- QA Inspector -->
+      <div id="qa-editor-card" class="card hidden" style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span id="qa-row-indicator" style="font-weight: bold; font-size: 14px; color: white;">Row 1 of 0</span>
+            <span id="qa-sync-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 6px;"></span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button onclick="prevQARow()" class="btn btn-secondary">◀ Prev</button>
+            <button onclick="nextQARow()" class="btn btn-secondary">Next ▶</button>
+            <button onclick="jumpNextIssue()" class="btn" style="background-color: rgba(217, 119, 6, 0.15); border: 1px solid rgba(217, 119, 6, 0.4); color: #f59e0b;">Next Issue ⚠️</button>
+          </div>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Audio Filename (MP3)</label>
+          <input type="text" id="qa-mp3-input" placeholder="e.g. 001.mp3" class="input-field" style="font-family: monospace;">
+        </div>
+
+        <!-- Visual Toolbar -->
+        <div style="background-color: #090d16; border: 1px solid #1f2937; padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 11px; font-weight: bold; color: #818cf8; text-transform: uppercase;">Visual Text Formatting Toolbar</span>
+            <span style="font-size: 11px; color: #9ca3af;">Select text in editor below and click a tool</span>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+            <div style="background-color: #111827; border: 1px solid #1f2937; padding: 6px 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+              <button onclick="applyBoxToSelection()" class="btn btn-warning">Apply Highlight Box</button>
+              <label style="font-size: 11px; color: #9ca3af;">Fill:</label>
+              <input type="color" id="tool-box-bg" value="#8c4e12" style="width: 26px; height: 26px; background: transparent; border: none; cursor: pointer;">
+              <label style="font-size: 11px; color: #9ca3af;">Border:</label>
+              <input type="color" id="tool-box-bc" value="#ffffff" style="width: 26px; height: 26px; background: transparent; border: none; cursor: pointer;">
             </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <button onclick="browseFile('csv')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-2">
-              <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-              Browse CSV
-            </button>
-            <span class="text-xs text-slate-400 truncate" id="csv-path-display">Select your transcription CSV</span>
-          </div>
-        </div>
 
-        <!-- Audio Directory Card -->
-        <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:border-slate-700 transition">
-          <div class="flex items-start justify-between mb-3">
-            <div>
-              <span class="text-xs font-medium uppercase tracking-wider text-slate-400">Media Assets</span>
-              <h3 class="text-sm font-semibold text-slate-200 mt-0.5">Audios Directory</h3>
+            <div style="background-color: #111827; border: 1px solid #1f2937; padding: 6px 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
+              <button onclick="applyOutlineToSelection()" class="btn btn-primary">Apply Outline</button>
+              <select id="tool-outline-w" style="width: auto; padding: 4px 8px; font-size: 12px;">
+                <option value="2">2px</option>
+                <option value="3" selected>3px</option>
+                <option value="5">5px</option>
+              </select>
+              <input type="color" id="tool-outline-c" value="#000000" style="width: 26px; height: 26px; background: transparent; border: none; cursor: pointer;">
             </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <button onclick="browseFolder('audios')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-2">
-              <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              Browse Audios
-            </button>
-            <span class="text-xs text-slate-400 truncate" id="audios-path-display">Select audio folder path</span>
+
+            <button onclick="removeStyleFromSelection()" class="btn btn-secondary">✕ Clear Style</button>
           </div>
         </div>
 
-      </section>
-
-      <!-- Main QA Workspace Card -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-        
-        <!-- Workspace Status Bar -->
-        <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
-          <div class="flex items-center gap-3">
-            <div class="px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-mono text-xs font-bold" id="qa-row-indicator">
-              Row 0 of 0
-            </div>
-            
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-size: 11px; color: #9ca3af;">Caption Editor</label>
+            <span style="font-size: 11px; color: #818cf8;">Live Visual Editor</span>
           </div>
-
-          <!-- Audio Player Controls -->
-          <div class="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
-            <button onclick="playCurrentAudio()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center gap-1.5">
-              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-              Play <span class="text-[10px] text-emerald-200 opacity-75 font-normal">(Space)</span>
-            </button>
-            <button onclick="stopAudio()" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center gap-1.5">
-              <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-              Stop
-            </button>
+          <div id="qa-caption-editor" contenteditable="true" oninput="syncCurrentInputsToMemory()" 
+            class="font-mm" 
+            style="min-height: 140px; max-height: 260px; overflow-y: auto; background-color: #090d16; border: 1px solid #1f2937; border-radius: 12px; padding: 14px; color: #ffffff; font-size: 16px; line-height: 1.8; outline: none;">
           </div>
         </div>
 
-        <!-- Editor Form Fields -->
-        <div class="space-y-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1.5">Audio Filename (MP3)</label>
-            <input type="text" id="qa-mp3-input" placeholder="e.g. lesson_01_track_02.mp3" 
-              class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 outline-none transition font-mono">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1f2937; padding-top: 14px;">
+          <div style="display: flex; gap: 10px;">
+            <button id="qa-play-btn" onclick="toggleAudio()" class="btn btn-success" style="display: flex; align-items: center; gap: 6px;">
+              <span>▶ Play</span>
+              <span style="background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: monospace;">Space</span>
+            </button>
+            <button onclick="saveQARow()" class="btn btn-primary">💾 Save Row</button>
           </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-medium text-slate-300">Caption Text (Myanmar Font Support)</label>
-              <span class="text-[11px] text-indigo-400">Unicode / Pyidaungsu Compatible</span>
-            </div>
-            <textarea rows="4" id="qa-caption-input" placeholder="မြန်မာစာတန်းထိုး စာသားကို ဤနေရာတွင် ထည့်သွင်း/စစ်ဆေးပါ..." 
-              class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3.5 text-sm text-slate-100 placeholder-slate-600 outline-none transition font-mm leading-relaxed"></textarea>
-          </div>
+          <button onclick="exportCleanedCSV()" class="btn btn-secondary">Export Cleaned CSV</button>
         </div>
 
-        <!-- Action Navigation Footer -->
-        <div class="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-800">
-          <div class="flex items-center gap-2">
-            <button onclick="prevQARow()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5">
-              <span>←</span> Previous
-            </button>
-            <button onclick="saveQARow()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5">
-              💾 Save Row
-            </button>
-            <button onclick="nextQARow()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5">
-              Next <span>→</span>
-            </button>
-            <button onclick="jumpToIssue()" class="px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium rounded-xl border border-amber-500/30 transition flex items-center gap-1.5">
-              ⚠️ Next Issue
-            </button>
-          </div>
-
-          <button onclick="exportCleanCSV()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-2">
-            ✨ Export Cleaned CSV
-          </button>
-        </div>
-
-      </section>
+      </div>
     </div>
 
-    <!-- TAB 2: VIDEO GENERATOR SECTION -->
-    <div id="tab-gen" class="space-y-6 hidden">
-      <!-- Media Settings -->
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <!-- Images Directory Card -->
-        <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
-          <span class="text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">Image Assets</span>
-          <h3 class="text-sm font-semibold text-slate-200 mb-3">Images Directory</h3>
-          <div class="flex items-center gap-3">
-            <button onclick="browseFolder('images')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-2">
-              Browse Images
-            </button>
-            <span class="text-xs text-slate-400 truncate" id="images-path-display">Select images folder path</span>
+    <!-- TAB 2: Video Generator -->
+    <div id="tab-gen" class="hidden" style="max-width: 1000px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+      
+      <!-- Paths -->
+      <div class="grid-3">
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="overflow: hidden; margin-right: 8px;">
+            <span style="font-size: 11px; color: #9ca3af; display: block;">Media Folder</span>
+            <span id="label-images-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No folder selected</span>
           </div>
+          <button onclick="browseImages()" class="btn btn-primary" style="flex-shrink: 0;">Browse</button>
         </div>
 
-        <!-- Output Video Destination Card -->
-        <div class="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
-          <span class="text-xs font-medium uppercase tracking-wider text-slate-400 mb-1">Output Destination</span>
-          <h3 class="text-sm font-semibold text-slate-200 mb-3">Save Output Path</h3>
-          <div class="flex items-center gap-3">
-            <button onclick="browseSaveOutput()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-2">
-              Save To
-            </button>
-            <span class="text-xs text-slate-400 truncate" id="output-path-display">Default: final_output.mp4</span>
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="overflow: hidden; margin-right: 8px;">
+            <span style="font-size: 11px; color: #9ca3af; display: block;">Corner Logo</span>
+            <span id="label-logo-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Optional (None)</span>
           </div>
+          <button onclick="browseLogo()" class="btn btn-secondary" style="flex-shrink: 0;">Select</button>
         </div>
-      </section>
 
-      <!-- Video Settings & Render Controls -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-        <h3 class="text-sm font-semibold text-slate-200 border-b border-slate-800 pb-3">Render Configuration</h3>
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="overflow: hidden; margin-right: 8px;">
+            <span style="font-size: 11px; color: #9ca3af; display: block;">Output Path</span>
+            <span id="label-output-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">final_output.mp4</span>
+          </div>
+          <button onclick="browseOutput()" class="btn btn-secondary" style="flex-shrink: 0;">Change</button>
+        </div>
+      </div>
+
+      <!-- Render Settings Panel -->
+      <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
+        <h2 style="font-size: 12px; font-weight: bold; color: #9ca3af; text-transform: uppercase;">Video Layout, Typography & Overlay</h2>
+
+        <div class="grid-3">
           <div>
-            <label class="block text-slate-400 mb-1">Format</label>
-            <select id="gen-format" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none">
-              <option value="landscape">Landscape (16:9 / 1920x1080)</option>
-              <option value="mobile">Mobile / Shorts (9:16 / 1080x1920)</option>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Format</label>
+            <select id="gen-format" onchange="adjustDefaultFontSettings()">
+              <option value="landscape" selected>Landscape (16:9 - 1920x1080)</option>
+              <option value="mobile">Mobile / Shorts (9:16 - 1080x1920)</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-slate-400 mb-1">Overlay Mode</label>
-            <select id="gen-overlay-mode" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none">
-              <option value="Full Video Overlay">Full Video Overlay</option>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Font Size (px)</label>
+            <input type="number" id="gen-font-size" value="44" min="20" max="80" class="input-field">
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Line Spacing (px)</label>
+            <input type="number" id="gen-line-spacing" value="22" min="10" max="50" class="input-field">
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Vertical Position</label>
+            <select id="gen-position">
+              <option value="high">Top (High)</option>
+              <option value="middle" selected>Center (Middle)</option>
+              <option value="low">Bottom (Low)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Background Overlay</label>
+            <select id="gen-overlay-mode">
+              <option value="Full Video Overlay" selected>Full Video Overlay</option>
               <option value="Text Box Only">Text Box Only</option>
+              <option value="None">None (Pure Background)</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-slate-400 mb-1">Text Position</label>
-            <select id="gen-position" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none">
-              <option value="middle">Middle</option>
-              <option value="low">Low (Bottom)</option>
-              <option value="high">High (Top)</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-slate-400 mb-1">Overlay Color (<span id="gen-color-label">#000000</span>)</label>
-            <input type="color" id="gen-color" value="#000000" class="w-full h-10 bg-slate-950 border border-slate-800 rounded-xl p-1 cursor-pointer">
-          </div>
-
-          <div>
-            <label class="block text-slate-400 mb-1">Opacity (%)</label>
-            <input type="number" id="gen-opacity" value="70" min="0" max="100" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none">
-          </div>
-
-          <div>
-            <label class="block text-slate-400 mb-1">Font Size</label>
-            <input type="number" id="gen-font-size" value="46" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none">
-          </div>
-
-          <div>
-            <label class="block text-slate-400 mb-1">Line Spacing</label>
-            <input type="number" id="gen-line-spacing" value="20" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 outline-none">
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Overlay Color & Opacity (<span id="gen-opacity-val">50</span>%)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="color" id="gen-color" value="#000000" style="width: 38px; height: 38px; background: transparent; border: none; cursor: pointer; flex-shrink: 0;">
+              <input type="range" id="gen-opacity" min="0" max="100" value="50" style="flex: 1;" oninput="document.getElementById('gen-opacity-val').innerText = this.value">
+            </div>
           </div>
         </div>
 
-        <!-- Render Progress & Start Button -->
-        <div class="pt-4 border-t border-slate-800 space-y-4">
-          <div class="flex items-center justify-between text-xs text-slate-400">
-            <span id="render-status-text">Ready to render</span>
-            <span id="render-pct-text">0%</span>
-          </div>
-          <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
-            <div id="render-progress-bar" class="bg-indigo-600 h-2 w-0 transition-all duration-300"></div>
+        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1f2937; padding-top: 16px;">
+          <div id="render-status-container" class="hidden" style="flex: 1; margin-right: 20px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">
+              <span id="render-status-text">Rendering...</span>
+              <span id="render-status-pct">0%</span>
+            </div>
+            <div style="background-color: #090d16; border: 1px solid #1f2937; height: 8px; border-radius: 999px; overflow: hidden;">
+              <div id="render-progress-bar" style="background-color: #4f46e5; height: 100%; width: 0%; transition: width 0.3s;"></div>
+            </div>
           </div>
 
-          <button id="btn-render-start" onclick="startRender()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2">
+          <button id="btn-start-render" onclick="startRender()" class="btn btn-primary" style="padding: 12px 24px; font-size: 13px;">
             🎬 Start Video Rendering
           </button>
         </div>
 
-      </section>
+      </div>
     </div>
 
   </main>
