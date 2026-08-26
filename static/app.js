@@ -24,6 +24,19 @@ function switchTab(tab) {
   }
 }
 
+function adjustDefaultFontSettings() {
+  const fmt = document.getElementById('gen-format')?.value;
+  const fontIn = document.getElementById('gen-font-size');
+  const spaceIn = document.getElementById('gen-line-spacing');
+  if (fmt === 'mobile') {
+    if (fontIn) fontIn.value = 38;
+    if (spaceIn) spaceIn.value = 18;
+  } else {
+    if (fontIn) fontIn.value = 44;
+    if (spaceIn) spaceIn.value = 22;
+  }
+}
+
 async function browseCSV() {
   if (!window.pywebview?.api) return;
   const res = await window.pywebview.api.select_file('csv');
@@ -386,22 +399,37 @@ async function startRender() {
 
   const cfg = {
     format: document.getElementById('gen-format')?.value || 'landscape',
-    caption_anim: document.getElementById('gen-caption-anim')?.value || 'fade_in',
-    overlay_mode: document.getElementById('gen-overlay-mode')?.value || 'Full Video Overlay',
     position: document.getElementById('gen-position')?.value || 'middle',
+    font_size: parseInt(document.getElementById('gen-font-size')?.value) || 44,
+    line_spacing: parseInt(document.getElementById('gen-line-spacing')?.value) || 22,
+    overlay_mode: document.getElementById('gen-overlay-mode')?.value || 'Full Video Overlay',
     color: document.getElementById('gen-color')?.value || '#000000',
-    opacity: document.getElementById('gen-opacity')?.value || '70',
-    font_size: 44,
+    opacity: document.getElementById('gen-opacity')?.value || '50',
   };
 
-  document.getElementById('render-status-container')?.classList.remove('hidden');
+  const statusContainer = document.getElementById('render-status-container');
+  const bar = document.getElementById('render-progress-bar');
+  const pctTxt = document.getElementById('render-status-pct');
+  const txt = document.getElementById('render-status-text');
+
+  if (statusContainer) statusContainer.classList.remove('hidden');
+  if (bar) bar.style.width = '0%';
+  if (pctTxt) pctTxt.innerText = '0%';
+  if (txt) txt.innerText = 'Starting Render...';
+
   const btn = document.getElementById('btn-start-render');
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "⏳ Rendering...";
+  }
 
   const res = await window.pywebview.api.start_video_rendering(cfg);
   if (!res.success) {
     alert(res.error);
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = "🎬 Start Video Rendering";
+    }
   }
 }
 
@@ -417,7 +445,23 @@ window.updateRenderStatus = function(msg, pct) {
 window.renderFinished = function(success, message) {
   alert(message);
   const btn = document.getElementById('btn-start-render');
-  if (btn) btn.disabled = false;
+  if (btn) {
+    btn.disabled = false;
+    btn.innerText = "🎬 Start Video Rendering";
+  }
+
+  const statusContainer = document.getElementById('render-status-container');
+  const txt = document.getElementById('render-status-text');
+  const pctTxt = document.getElementById('render-status-pct');
+  const bar = document.getElementById('render-progress-bar');
+
+  if (txt) txt.innerText = "Ready for next video";
+  if (pctTxt) pctTxt.innerText = "0%";
+  if (bar) bar.style.width = "0%";
+
+  setTimeout(() => {
+    if (statusContainer) statusContainer.classList.add('hidden');
+  }, 2000);
 };
 
 window.addEventListener('keydown', (e) => {

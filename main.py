@@ -30,7 +30,21 @@ class BackendAPI:
         self.audios_dir = ""
         self.images_dir = ""
         self.logo_path = ""
+        self.bgm_path = ""
+        self.resolve_bgm_path()
         self.output_video = str(BASE_DIR / "final_output.mp4")
+
+    def resolve_bgm_path(self):
+        bgm_candidates = [
+            BASE_DIR / "assets" / "dhamma_bgm.mp3.mp3",
+            BASE_DIR / "assets" / "dhamma_bgm.mp3",
+            BASE_DIR / "dhamma_bgm.mp3",
+        ]
+        self.bgm_path = ""
+        for c in bgm_candidates:
+            if c.exists():
+                self.bgm_path = str(c.resolve())
+                break
 
     def set_window(self, window):
         self.window = window
@@ -184,26 +198,33 @@ class BackendAPI:
         if not self.images_dir or self.df is None:
             return {"success": False, "error": "Images folder or CSV data is missing."}
 
+        self.resolve_bgm_path()
+
         def _worker():
             def _prog(msg, pct):
                 safe_msg = json.dumps(str(msg))
                 self.window.evaluate_js(f"updateRenderStatus({safe_msg}, {pct})")
 
-            success, res = video_engine.render_all_clips(
-                self.df,
-                self.images_dir,
-                self.get_audio_path,
-                self.output_video,
-                self.logo_path,
-                config,
-                _prog,
-            )
+            try:
+                success, res = video_engine.render_all_clips(
+                    self.df,
+                    self.images_dir,
+                    self.get_audio_path,
+                    self.output_video,
+                    self.logo_path,
+                    config,
+                    _prog,
+                    bgm_path=self.bgm_path,
+                )
 
-            if success:
-                safe_res = json.dumps(f"Video rendered successfully:\n{res}")
-                self.window.evaluate_js(f"renderFinished(true, {safe_res})")
-            else:
-                safe_err = json.dumps(f"Render Error: {res}")
+                if success:
+                    safe_res = json.dumps(f"Video rendered successfully:\n{res}")
+                    self.window.evaluate_js(f"renderFinished(true, {safe_res})")
+                else:
+                    safe_err = json.dumps(f"Render Error: {res}")
+                    self.window.evaluate_js(f"renderFinished(false, {safe_err})")
+            except Exception as e:
+                safe_err = json.dumps(f"Unexpected Error: {str(e)}")
                 self.window.evaluate_js(f"renderFinished(false, {safe_err})")
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -218,8 +239,8 @@ if __name__ == "__main__":
         title="Dhamma Studio - Video Automation",
         url=html_file.as_uri(),
         js_api=api,
-        width=1120,
-        height=880,
+        width=1160,
+        height=900,
         resizable=True,
     )
     api.set_window(window)

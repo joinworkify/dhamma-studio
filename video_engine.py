@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import textwrap
+from concurrent.futures import ThreadPoolExecutor
 import mutagen
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
@@ -117,6 +118,46 @@ def parse_styled_blocks(raw_text):
     return blocks
 
 
+def paginate_blocks(blocks, wrap_width, max_lines_per_page=4):
+    """
+    စာကြောင်းအရေအတွက် စုစုပေါင်း ၄ ကြောင်းထက် မကျော်စေရန် ပိုင်းဖြတ်ပေးသည့် စနစ်
+    """
+    if not blocks:
+        return []
+
+    pages = []
+    current_page = []
+    current_line_count = 0
+
+    for b in blocks:
+        lines = textwrap.wrap(b["text"], width=wrap_width)
+        lines_count = max(1, len(lines))
+
+        if lines_count > max_lines_per_page:
+            if current_page:
+                pages.append(current_page)
+                current_page = []
+                current_line_count = 0
+
+            for i in range(0, len(lines), max_lines_per_page):
+                sub_lines = lines[i : i + max_lines_per_page]
+                pages.append([{**b, "text": "\n".join(sub_lines), "_is_prewrapped": True}])
+            continue
+
+        if current_line_count + lines_count > max_lines_per_page:
+            pages.append(current_page)
+            current_page = [b]
+            current_line_count = lines_count
+        else:
+            current_page.append(b)
+            current_line_count += lines_count
+
+    if current_page:
+        pages.append(current_page)
+
+    return pages
+
+
 def create_static_dimmer_overlay(
     width,
     height,
@@ -147,27 +188,16 @@ def create_static_dimmer_overlay(
     overlay.save(output_path, "PNG")
 
 
-def create_caption_overlay(
-    text,
-    width,
-    height,
-    font_size,
-    wrap_width,
-    line_spacing,
-    pos_choice,
-    is_mobile,
-    output_path,
-):
+def render_blocks_to_image(blocks, width, height, font_size, wrap_width, line_spacing, pos_choice, is_mobile, output_path):
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    font_normal = get_render_font(font_size)
-    font_box = get_render_font(int(font_size * 1.20))
-
-    blocks = parse_styled_blocks(text)
     if not blocks:
         overlay.save(output_path, "PNG")
         return
+
+    font_normal = get_render_font(font_size)
+    font_box = get_render_font(int(font_size * 1.15))
 
     rendered_items = []
     total_content_h = 0
@@ -175,17 +205,21 @@ def create_caption_overlay(
     for b in blocks:
         is_box = b["is_box"]
         curr_font = font_box if is_box else font_normal
-        wrapped = textwrap.wrap(b["text"], width=wrap_width)
-        formatted = "\n".join(wrapped)
+        
+        if b.get("_is_prewrapped"):
+            formatted = b["text"]
+        else:
+            wrapped = textwrap.wrap(b["text"], width=wrap_width)
+            formatted = "\n".join(wrapped)
 
         bbox = draw.multiline_textbbox((0, 0), formatted, font=curr_font, align="center", spacing=line_spacing)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
 
-        pad_x = 36 if is_box else 20
-        pad_y = 24 if is_box else 14
+        pad_x = 28 if is_box else 16
+        pad_y = 18 if is_box else 10
 
-        bw = min(int(width * 0.92), tw + (pad_x * 2)) if is_box else tw
+        bw = min(int(width * 0.90), tw + (pad_x * 2)) if is_box else tw
         bh = th + (pad_y * 2) if is_box else th
 
         rendered_items.append({
@@ -206,7 +240,7 @@ def create_caption_overlay(
     if pos_choice == "high":
         start_y = 120 if not is_mobile else 220
     elif pos_choice == "low":
-        start_y = height - total_content_h - (120 if not is_mobile else 300)
+        start_y = height - total_content_h - (120 if not is_mobile else 280)
     else:
         start_y = (height - total_content_h) // 2
 
@@ -240,7 +274,7 @@ def create_caption_overlay(
             ty = curr_y
             curr_y += item["text_h"] + line_spacing
 
-        s_w = b.get("stroke_w", 0)
+        s_w = b.get("stroke_w", 3)
         s_c = b.get("stroke_c", "#000000")
         s_rgba = hex_to_rgba(s_c, 100) if s_w > 0 else None
 
@@ -259,13 +293,9 @@ def create_caption_overlay(
 
 
 def prepare_final_image_layer(img_path, width, height, is_mobile, output_path):
-    """
-    Instantly creates the base canvas with blurred top/bottom and sharp centered foreground.
-    """
     try:
         orig = Image.open(img_path).convert("RGB")
         if is_mobile:
-            # 1. Background Blurred Fill
             scale_bg = max(width / orig.width, height / orig.height)
             bg_w = int(orig.width * scale_bg)
             bg_h = int(orig.height * scale_bg)
@@ -275,7 +305,6 @@ def prepare_final_image_layer(img_path, width, height, is_mobile, output_path):
             canvas = resized_bg.crop((crop_x, crop_y, crop_x + width, crop_y + height))
             canvas = canvas.filter(ImageFilter.GaussianBlur(radius=25))
 
-            # 2. Centered Sharp Foreground (Original Aspect Ratio)
             scale_fg = min(width / orig.width, height / orig.height)
             fg_w = int(orig.width * scale_fg)
             fg_h = int(orig.height * scale_fg)
@@ -299,35 +328,25 @@ def prepare_final_image_layer(img_path, width, height, is_mobile, output_path):
         fallback.save(output_path, "JPEG")
 
 
-def build_caption_filter(anim_type, input_label, output_label):
-    dur = 0.3
-    if anim_type == "fade_in":
-        return f"{input_label}format=yuva420p,fade=t=in:st=0:d={dur}:alpha=1{output_label};"
-    elif anim_type == "soft_zoom":
-        return (
-            f"{input_label}format=yuva420p,"
-            f"zoompan=z='if(lte(on,8), 1.02-0.02*(on/8), 1.0)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=24,"
-            f"fade=t=in:st=0:d={dur}:alpha=1{output_label};"
-        )
-    elif anim_type == "slide_up" or anim_type == "slide_down" or anim_type == "blur_in":
-        return f"{input_label}format=yuva420p,fade=t=in:st=0:d={dur}:alpha=1{output_label};"
-    else:
-        return f"{input_label}format=yuva420p{output_label};"
+def render_single_task(task):
+    cmd, clip_mp4 = task
+    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return clip_mp4 if res.returncode == 0 else None
 
 
-def render_all_clips(df, media_dir, get_audio_path_fn, output_file, logo_path, cfg, progress_cb):
+def render_all_clips(df, media_dir, get_audio_path_fn, output_file, logo_path, cfg, progress_cb, bgm_path=""):
     temp_dir = Path(tempfile.mkdtemp(prefix="fast_dhamma_"))
     try:
         is_mobile = cfg.get("format", "landscape") == "mobile"
         width, height = (1080, 1920) if is_mobile else (1920, 1080)
-        font_size = int(cfg.get("font_size", 42 if is_mobile else 46))
-        wrap_width = int(32 if is_mobile else 38)
-        line_spacing = int(18 if is_mobile else 20)
+        
+        font_size = int(cfg.get("font_size", 38 if is_mobile else 44))
+        wrap_width = int(cfg.get("wrap_width", 28 if is_mobile else 38))
+        line_spacing = int(cfg.get("line_spacing", 18 if is_mobile else 22))
         pos_choice = cfg.get("position", "middle")
         
         overlay_mode = cfg.get("overlay_mode", "Full Video Overlay")
         rgba_color = hex_to_rgba(cfg.get("color", "#000000"), cfg.get("opacity", 45))
-        caption_anim = cfg.get("caption_anim", "fade_in")
 
         supported_exts = [".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".mkv", ".avi", ".webm"]
         video_exts = [".mp4", ".mov", ".mkv", ".avi", ".webm"]
@@ -349,8 +368,8 @@ def render_all_clips(df, media_dir, get_audio_path_fn, output_file, logo_path, c
             rgba_color=rgba_color,
         )
 
-        rendered_clips = []
-        total = len(df)
+        tasks = []
+        bgm_start_offset = 10.0  # BGM တီးလုံးကို ၁၀ စက္ကန့်မှ စတင်ဖြတ်ယူခြင်း
 
         for idx, row in df.iterrows():
             caption = str(row["caption"]).strip() if str(row["caption"]) != "nan" else ""
@@ -368,86 +387,135 @@ def render_all_clips(df, media_dir, get_audio_path_fn, output_file, logo_path, c
             media_path = media_files[idx % len(media_files)]
             is_video_input = media_path.suffix.lower() in video_exts
 
-            caption_png = temp_dir / f"caption_{idx:04d}.png"
+            blocks = parse_styled_blocks(caption)
+            pages = paginate_blocks(blocks, wrap_width=wrap_width, max_lines_per_page=4)
+            if not pages:
+                pages = [[]]
+
             clip_mp4 = temp_dir / f"clip_{idx:04d}.mp4"
+            include_bgm = (idx == 0 and bgm_path and os.path.exists(bgm_path))
 
-            create_caption_overlay(
-                caption,
-                width,
-                height,
-                font_size,
-                wrap_width,
-                line_spacing,
-                pos_choice,
-                is_mobile,
-                str(caption_png),
-            )
-
-            txt_filter = build_caption_filter(caption_anim, "[2:v]", "[txt]")
-            txt_src = "[txt]"
-
+            base_bg_jpg = temp_dir / f"base_bg_{idx:04d}.jpg"
             if not is_video_input:
-                base_bg_jpg = temp_dir / f"base_bg_{idx:04d}.jpg"
                 prepare_final_image_layer(media_path, width, height, is_mobile, str(base_bg_jpg))
 
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-threads", "0",
-                    "-framerate", "24",
-                    "-loop", "1", "-i", str(base_bg_jpg),
-                    "-loop", "1", "-i", str(static_overlay_png),
-                    "-loop", "1", "-i", str(caption_png),
-                    "-i", str(audio_path),
-                    "-filter_complex", (
-                        f"{txt_filter}"
-                        f"[0:v][1:v]overlay=0:0[bg_dim];"
-                        f"[bg_dim]{txt_src}overlay=0:0[v]"
-                    ),
-                    "-map", "[v]",
-                    "-map", "3:a",
-                    "-c:v", "libx264",
-                    "-preset", "ultrafast",
-                    "-tune", "stillimage",
-                    "-c:a", "aac",
-                    "-b:a", "128k",
-                    "-pix_fmt", "yuv420p",
-                    "-t", str(audio_dur),
-                    str(clip_mp4),
-                ]
-            else:
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-threads", "0",
-                    "-stream_loop", "-1", "-i", str(media_path),
-                    "-loop", "1", "-i", str(static_overlay_png),
-                    "-loop", "1", "-i", str(caption_png),
-                    "-i", str(audio_path),
-                    "-filter_complex", (
-                        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}[base];"
-                        f"{txt_filter}"
-                        f"[base][1:v]overlay=0:0[bg_dim];"
-                        f"[bg_dim]{txt_src}overlay=0:0[v]"
-                    ),
-                    "-map", "[v]",
-                    "-map", "3:a",
-                    "-c:v", "libx264",
-                    "-preset", "ultrafast",
-                    "-c:a", "aac",
-                    "-b:a", "128k",
-                    "-pix_fmt", "yuv420p",
-                    "-t", str(audio_dur),
-                    str(clip_mp4),
-                ]
+            num_pages = len(pages)
 
-            progress_cb(f"Rendering Clip {idx + 1}/{total}...", int((idx / total) * 90))
-            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if res.returncode == 0:
-                rendered_clips.append(clip_mp4)
+            # စာလုံးရေအလိုက် Weighted Dynamic Timings
+            page_char_counts = [max(1, sum(len(b.get("text", "")) for b in page_blocks)) for page_blocks in pages]
+            total_chars = sum(page_char_counts)
+
+            page_timings = []
+            accumulated_time = 0.0
+
+            for p_idx, count in enumerate(page_char_counts):
+                st = accumulated_time
+                if p_idx == num_pages - 1:
+                    et = audio_dur
+                else:
+                    dur = (count / total_chars) * audio_dur
+                    et = round(st + dur, 2)
+                    accumulated_time = et
+                page_timings.append((st, et))
+
+            page_pngs = []
+            for p_idx, page_blocks in enumerate(pages):
+                p_png = temp_dir / f"cap_{idx:04d}_p{p_idx}.png"
+                render_blocks_to_image(page_blocks, width, height, font_size, wrap_width, line_spacing, pos_choice, is_mobile, str(p_png))
+                page_pngs.append(p_png)
+
+            inputs = []
+            if not is_video_input:
+                inputs += ["-loop", "1", "-i", str(base_bg_jpg)]
+            else:
+                inputs += ["-stream_loop", "-1", "-i", str(media_path)]
+
+            inputs += ["-loop", "1", "-i", str(static_overlay_png)]
+            for p_png in page_pngs:
+                inputs += ["-loop", "1", "-i", str(p_png)]
+
+            inputs += ["-i", str(audio_path)]
+            audio_in_idx = 2 + num_pages
+
+            if include_bgm:
+                inputs += ["-stream_loop", "-1", "-i", str(bgm_path)]
+                bgm_in_idx = audio_in_idx + 1
+
+            filter_parts = []
+            if is_video_input:
+                filter_parts.append(f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}[base]")
+                last_v = "[base]"
+            else:
+                last_v = "[0:v]"
+
+            filter_parts.append(f"{last_v}[1:v]overlay=0:0[bg_dim]")
+            last_bg = "[bg_dim]"
+
+            for p_idx in range(num_pages):
+                st, et = page_timings[p_idx]
+                cap_in = f"[{2 + p_idx}:v]"
+                fade_txt = f"{cap_in}format=yuva420p,fade=t=in:st={st}:d=0.25:alpha=1,fade=t=out:st={max(0, et - 0.25)}:d=0.25:alpha=1[txt_{p_idx}]"
+                filter_parts.append(fade_txt)
+                
+                next_bg = f"[v_step_{p_idx}]" if p_idx < num_pages - 1 else "[v]"
+                overlay_step = f"{last_bg}[txt_{p_idx}]overlay=0:0:enable='between(t,{st},{et})'{next_bg}"
+                filter_parts.append(overlay_step)
+                last_bg = next_bg
+
+            # Audio filter (BGM ကို ၁၀ စက္ကန့်မှ စတင်ဖြတ်ပြီး volume 0.35 ဖြင့် ရောစပ်ခြင်း)
+            if include_bgm:
+                audio_filter = (
+                    f"[{audio_in_idx}:a]volume=1.0[v_main];"
+                    f"[{bgm_in_idx}:a]atrim=start={bgm_start_offset},asetpts=PTS-STARTPTS,volume=0.35[v_bgm];"
+                    f"[v_main][v_bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+                )
+                filter_parts.append(audio_filter)
+                a_map = "[aout]"
+            else:
+                a_map = f"{audio_in_idx}:a"
+
+            filter_str = ";".join(filter_parts)
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-threads", "2",
+                "-framerate", "24",
+            ] + inputs + [
+                "-filter_complex", filter_str,
+                "-map", "[v]",
+                "-map", a_map,
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "stillimage" if not is_video_input else "fastdecode",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-pix_fmt", "yuv420p",
+                "-t", str(audio_dur),
+                str(clip_mp4),
+            ]
+
+            tasks.append((cmd, clip_mp4))
+
+        # Parallel Render
+        rendered_clips = []
+        max_workers = min(os.cpu_count() or 4, 4)
+        completed = 0
+
+        progress_cb("Rendering Clips...", 15)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(render_single_task, t) for t in tasks]
+            for future in futures:
+                res = future.result()
+                completed += 1
+                progress_cb(f"Rendered {completed}/{len(tasks)} clips...", 15 + int((completed / len(tasks)) * 75))
+                if res:
+                    rendered_clips.append(res)
 
         if not rendered_clips:
-            return False, "Failed to render video clips. Please check audio/media files."
+            return False, "Failed to render clips. Please check source assets."
 
-        progress_cb("Merging clips into final video...", 95)
+        progress_cb("Merging into final video...", 95)
         concat_txt = temp_dir / "concat_list.txt"
         with open(concat_txt, "w", encoding="utf-8") as f:
             for c in rendered_clips:
@@ -464,7 +532,7 @@ def render_all_clips(df, media_dir, get_audio_path_fn, output_file, logo_path, c
         ]
         res = subprocess.run(merge_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if res.returncode != 0:
-            return False, "FFmpeg error during final video merge."
+            return False, "Error during final video concatenation."
 
         progress_cb("Rendering Complete!", 100)
         return True, str(output_file)

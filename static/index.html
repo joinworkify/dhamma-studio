@@ -12,7 +12,6 @@
       font-family: 'NamKhone', 'Noto Sans Myanmar', 'Pyidaungsu', sans-serif;
     }
 
-    /* Force Native Dark UI & Dropdowns */
     html {
       color-scheme: dark;
     }
@@ -121,17 +120,10 @@
       gap: 16px;
     }
 
-    .grid-4 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr;
-      gap: 16px;
-    }
-
     .hidden {
       display: none !important;
     }
 
-    /* Scrollbar */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -201,6 +193,7 @@
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 14px;">
           <div style="display: flex; align-items: center; gap: 12px;">
             <span id="qa-row-indicator" style="font-weight: bold; font-size: 14px; color: white;">Row 1 of 0</span>
+            <span id="qa-sync-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 6px;"></span>
           </div>
           <div style="display: flex; gap: 8px;">
             <button onclick="prevQARow()" class="btn btn-secondary">◀ Prev</button>
@@ -222,7 +215,6 @@
           </div>
 
           <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
-            <!-- Box Tool -->
             <div style="background-color: #111827; border: 1px solid #1f2937; padding: 6px 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
               <button onclick="applyBoxToSelection()" class="btn btn-warning">Apply Highlight Box</button>
               <label style="font-size: 11px; color: #9ca3af;">Fill:</label>
@@ -231,7 +223,6 @@
               <input type="color" id="tool-box-bc" value="#ffffff" style="width: 26px; height: 26px; background: transparent; border: none; cursor: pointer;">
             </div>
 
-            <!-- Outline Tool -->
             <div style="background-color: #111827; border: 1px solid #1f2937; padding: 6px 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px;">
               <button onclick="applyOutlineToSelection()" class="btn btn-primary">Apply Outline</button>
               <select id="tool-outline-w" style="width: auto; padding: 4px 8px; font-size: 12px;">
@@ -242,12 +233,10 @@
               <input type="color" id="tool-outline-c" value="#000000" style="width: 26px; height: 26px; background: transparent; border: none; cursor: pointer;">
             </div>
 
-            <!-- Clear Tool -->
             <button onclick="removeStyleFromSelection()" class="btn btn-secondary">✕ Clear Style</button>
           </div>
         </div>
 
-        <!-- Caption Visual Editor -->
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label style="font-size: 11px; color: #9ca3af;">Caption Editor</label>
@@ -259,7 +248,6 @@
           </div>
         </div>
 
-        <!-- Actions -->
         <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1f2937; padding-top: 14px;">
           <div style="display: flex; gap: 10px;">
             <button id="qa-play-btn" onclick="toggleAudio()" class="btn btn-success" style="display: flex; align-items: center; gap: 6px;">
@@ -277,10 +265,11 @@
     <!-- TAB 2: Video Generator -->
     <div id="tab-gen" class="hidden" style="max-width: 1000px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
       
+      <!-- Paths -->
       <div class="grid-3">
         <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
           <div style="overflow: hidden; margin-right: 8px;">
-            <span style="font-size: 11px; color: #9ca3af; display: block;">Media Folder (Img/Vid)</span>
+            <span style="font-size: 11px; color: #9ca3af; display: block;">Media Folder</span>
             <span id="label-images-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No folder selected</span>
           </div>
           <button onclick="browseImages()" class="btn btn-primary" style="flex-shrink: 0;">Browse</button>
@@ -305,29 +294,29 @@
 
       <!-- Render Settings Panel -->
       <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
-        <h2 style="font-size: 12px; font-weight: bold; color: #9ca3af; text-transform: uppercase;">Video Layout & Animations</h2>
+        <h2 style="font-size: 12px; font-weight: bold; color: #9ca3af; text-transform: uppercase;">Video Layout, Typography & Overlay</h2>
 
         <div class="grid-3">
-      <div>
+          <div>
             <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Format</label>
-            <select id="gen-format">
+            <select id="gen-format" onchange="adjustDefaultFontSettings()">
               <option value="landscape" selected>Landscape (16:9 - 1920x1080)</option>
               <option value="mobile">Mobile / Shorts (9:16 - 1080x1920)</option>
             </select>
           </div>
 
           <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Caption Animation</label>
-            <select id="gen-caption-anim">
-              <option value="fade_in" selected>✨ 1. Soft Fade-In </option>
-              <option value="soft_zoom">🔍 2. Peaceful Text Zoom</option>
-              <option value="slide_up">⬆️ 3. Gentle Rise (Slide Up)</option>
-              <option value="slide_down">⬇️ 4. Gentle Descend (Slide Down)</option>
-              <option value="blur_in">🌫️ 5. Soft Lens Focus (Blur In)</option>
-              <option value="none">🕊️ 6. Instant</option>
-            </select>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Font Size (px)</label>
+            <input type="number" id="gen-font-size" value="44" min="20" max="80" class="input-field">
           </div>
 
+          <div>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Line Spacing (px)</label>
+            <input type="number" id="gen-line-spacing" value="22" min="10" max="50" class="input-field">
+          </div>
+        </div>
+
+        <div class="grid-3">
           <div>
             <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Vertical Position</label>
             <select id="gen-position">
@@ -336,9 +325,7 @@
               <option value="low">Bottom (Low)</option>
             </select>
           </div>
-        </div>
 
-        <div class="grid-3">
           <div>
             <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Background Overlay</label>
             <select id="gen-overlay-mode">
@@ -349,13 +336,11 @@
           </div>
 
           <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Overlay Color</label>
-            <input type="color" id="gen-color" value="#000000" class="input-field" style="height: 38px; padding: 2px; cursor: pointer;">
-          </div>
-
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Overlay Opacity (<span id="gen-opacity-val">70</span>%)</label>
-            <input type="range" id="gen-opacity" min="0" max="100" value="70" style="width: 100%; margin-top: 8px;" oninput="document.getElementById('gen-opacity-val').innerText = this.value">
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Overlay Color & Opacity (<span id="gen-opacity-val">50</span>%)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="color" id="gen-color" value="#000000" style="width: 38px; height: 38px; background: transparent; border: none; cursor: pointer; flex-shrink: 0;">
+              <input type="range" id="gen-opacity" min="0" max="100" value="50" style="flex: 1;" oninput="document.getElementById('gen-opacity-val').innerText = this.value">
+            </div>
           </div>
         </div>
 

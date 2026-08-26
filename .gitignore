@@ -1,4 +1,7 @@
-.venv/
+venv/
 __pycache__/
-*.pyc
-temp_render_webview/
+*.mp4
+*.mp3
+*.jpg
+*.png
+.temp/
