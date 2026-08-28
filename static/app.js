@@ -402,6 +402,8 @@ async function startRender() {
     position: document.getElementById('gen-position')?.value || 'middle',
     font_size: parseInt(document.getElementById('gen-font-size')?.value) || 44,
     line_spacing: parseInt(document.getElementById('gen-line-spacing')?.value) || 22,
+    max_lines: parseInt(document.getElementById('gen-max-lines')?.value) || 2,
+    lines_per_page: parseInt(document.getElementById('gen-max-lines')?.value) || 2,
     overlay_mode: document.getElementById('gen-overlay-mode')?.value || 'Full Video Overlay',
     color: document.getElementById('gen-color')?.value || '#000000',
     opacity: document.getElementById('gen-opacity')?.value || '50',

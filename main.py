@@ -200,6 +200,10 @@ class BackendAPI:
 
         self.resolve_bgm_path()
 
+        # Config default fallback sanity check
+        if isinstance(config, dict):
+            config["max_lines"] = int(config.get("max_lines", config.get("lines_per_page", 2)))
+
         def _worker():
             def _prog(msg, pct):
                 safe_msg = json.dumps(str(msg))

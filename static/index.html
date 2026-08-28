@@ -120,6 +120,12 @@
       gap: 16px;
     }
 
+    .grid-4 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 16px;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -193,7 +199,6 @@
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 14px;">
           <div style="display: flex; align-items: center; gap: 12px;">
             <span id="qa-row-indicator" style="font-weight: bold; font-size: 14px; color: white;">Row 1 of 0</span>
-            <span id="qa-sync-badge" style="font-size: 11px; padding: 3px 8px; border-radius: 6px;"></span>
           </div>
           <div style="display: flex; gap: 8px;">
             <button onclick="prevQARow()" class="btn btn-secondary">◀ Prev</button>
@@ -316,7 +321,8 @@
           </div>
         </div>
 
-        <div class="grid-3">
+        <!-- Row 2: Position, Lines Per Page & Background Overlay -->
+        <div class="grid-4">
           <div>
             <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Vertical Position</label>
             <select id="gen-position">
@@ -327,10 +333,19 @@
           </div>
 
           <div>
+            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Lines Per Page</label>
+            <select id="gen-max-lines">
+              <option value="1">1 Line</option>
+              <option value="2" selected>2 Lines</option>
+              <option value="3">3 Lines</option>
+              <option value="4">4 Lines</option>
+            </select>
+          </div>
+
+          <div>
             <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Background Overlay</label>
             <select id="gen-overlay-mode">
               <option value="Full Video Overlay" selected>Full Video Overlay</option>
-              <option value="Text Box Only">Text Box Only</option>
               <option value="None">None (Pure Background)</option>
             </select>
           </div>
