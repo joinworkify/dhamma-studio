@@ -1,5 +1,6 @@
 import html
 import os
+import platform
 from pathlib import Path
 import re
 import shutil
@@ -10,6 +11,7 @@ import mutagen
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 BASE_DIR = Path(__file__).resolve().parent
+CURRENT_OS = platform.system().lower()  # 'darwin' (Mac), 'windows', 'linux'
 
 
 # ============================================================
@@ -31,16 +33,31 @@ def get_render_font(size):
         BASE_DIR / "fonts" / "NamKhone Grand (2).ttf",
         BASE_DIR / "fonts" / "NamKhone Grand.ttf",
         BASE_DIR / "NamKhone Grand.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansMyanmar-Bold.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansMyanmar-Regular.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansMyanmar-Bold.otf",
+        # macOS Paths
+        Path("/System/Library/Fonts/Supplemental/NotoSansMyanmar.ttc"),
+        Path("/System/Library/Fonts/Supplemental/NotoSerifMyanmar.ttc"),
+        Path("/Library/Fonts/NotoSansMyanmar-Regular.ttf"),
+        # Linux Paths
+        Path("/usr/share/fonts/truetype/noto/NotoSansMyanmar-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansMyanmar-Regular.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansMyanmar-Bold.otf"),
+        # Windows Paths
+        Path("C:/Windows/Fonts/mmrtext.ttf"),
+        Path("C:/Windows/Fonts/mmrtextb.ttf"),
+        Path("C:/Windows/Fonts/NotoSansMyanmar-Regular.ttf"),
     ]
+
     for c in font_candidates:
-        if c.exists():
+        c_path = Path(c)
+        if c_path.exists():
+            # မြန်မာစာ ဗျည်းတွဲ/အသတ်များ မလွဲစေရန် RAQM shaping engine ဖြင့် အရင်ကြိုးစားမည်
             try:
-                return ImageFont.truetype(str(c), size)
+                return ImageFont.truetype(str(c_path), size, layout_engine=ImageFont.Layout.RAQM)
             except Exception:
-                pass
+                try:
+                    return ImageFont.truetype(str(c_path), size)
+                except Exception:
+                    pass
     return ImageFont.load_default()
 
 
@@ -122,9 +139,6 @@ def parse_styled_blocks(raw_text):
 
 
 def break_lines_by_natural_delimiters(text, max_pixel_w, font):
-    """
-    Myanmar punctuation (၊ ။) and spaces are preferred line-break points.
-    """
     dummy_img = Image.new("RGBA", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
 
@@ -444,7 +458,7 @@ def prepare_final_image_layer(
             canvas.save(
                 output_path,
                 "JPEG",
-                quality=80
+                quality=85
             )
         else:
             scale = max(
@@ -475,10 +489,10 @@ def prepare_final_image_layer(
             canvas.save(
                 output_path,
                 "JPEG",
-                quality=80
+                quality=85
             )
 
-    except Exception:
+    except Exception as err:
         fallback = Image.new(
             "RGB",
             (width, height),
@@ -491,14 +505,10 @@ def prepare_final_image_layer(
 
 
 # ============================================================
-# ENCODER DETECTION
+# CROSS-PLATFORM ENCODER DETECTION
 # ============================================================
 
 def ffmpeg_has_encoder(encoder_name):
-    """
-    Encoder သည် FFmpeg တွင် ပါဝင်ရုံသာမက Driver အမှန်တကယ် initialize လုပ်နိုင်ခြင်း
-    ရှိ/မရှိပါ dummy pipeline ဖြင့် စစ်ဆေးသည်။
-    """
     try:
         test_cmd = [
             "ffmpeg",
@@ -526,29 +536,40 @@ def choose_encoder(cfg):
 
     if requested in ("nvenc", "h264_nvenc"):
         if not ffmpeg_has_encoder("h264_nvenc"):
-            raise RuntimeError(
-                "h264_nvenc is not functional or CUDA/NVIDIA driver is missing."
-            )
+            raise RuntimeError("h264_nvenc is not functional or NVIDIA driver is missing.")
         return "nvenc"
+
+    if requested in ("videotoolbox", "h264_videotoolbox"):
+        if not ffmpeg_has_encoder("h264_videotoolbox"):
+            raise RuntimeError("h264_videotoolbox is not functional on this system.")
+        return "videotoolbox"
 
     if requested in ("qsv", "h264_qsv"):
         if not ffmpeg_has_encoder("h264_qsv"):
-            raise RuntimeError(
-                "h264_qsv is not functional in this runtime."
-            )
+            raise RuntimeError("h264_qsv is not functional in this runtime.")
         return "qsv"
 
     if requested in ("x264", "libx264", "cpu"):
         return "x264"
 
-    # AUTO: NVENC စမ်းသပ်အောင်မြင်မှသာ nvenc သုံးမည်၊ မရပါက x264 သို့ safe fallback လုပ်မည်
-    if ffmpeg_has_encoder("h264_nvenc"):
+    # AUTO DETECTION ACCORDING TO OS
+    if CURRENT_OS == "darwin" and ffmpeg_has_encoder("h264_videotoolbox"):
+        return "videotoolbox"
+    elif ffmpeg_has_encoder("h264_nvenc"):
         return "nvenc"
+    elif ffmpeg_has_encoder("h264_qsv"):
+        return "qsv"
 
     return "x264"
 
 
 def encoder_args(encoder):
+    if encoder == "videotoolbox":
+        return [
+            "-c:v", "h264_videotoolbox",
+            "-b:v", "4500k",
+            "-pix_fmt", "yuv420p",
+        ]
     if encoder == "nvenc":
         return [
             "-c:v", "h264_nvenc",
@@ -558,7 +579,6 @@ def encoder_args(encoder):
             "-b:v", "0",
             "-pix_fmt", "yuv420p",
         ]
-
     if encoder == "qsv":
         return [
             "-c:v", "h264_qsv",
@@ -606,96 +626,43 @@ def render_all_clips(
 ):
     temp_dir = Path(
         tempfile.mkdtemp(
-            prefix="turbo_dhamma_"
+            prefix="dhamma_render_"
         )
     )
 
     try:
-        is_mobile = (
-            cfg.get("format", "landscape")
-            == "mobile"
-        )
+        is_mobile = (cfg.get("format", "landscape") == "mobile")
 
-        width, height = (
-            (1080, 1920)
-            if is_mobile
-            else (1920, 1080)
-        )
-
-        font_size = int(
-            cfg.get(
-                "font_size",
-                38 if is_mobile else 44
-            )
-        )
-
-        line_spacing = int(
-            cfg.get(
-                "line_spacing",
-                18 if is_mobile else 22
-            )
-        )
-
-        pos_choice = cfg.get(
-            "position",
-            "middle"
-        )
-
-        max_lines = max(
-            1,
-            int(
-                cfg.get(
-                    "max_lines",
-                    cfg.get("lines_per_page", 2)
-                )
-            )
-        )
-
-        overlay_mode = cfg.get(
-            "overlay_mode",
-            "Full Video Overlay"
-        )
-
-        rgba_color = hex_to_rgba(
-            cfg.get("color", "#000000"),
-            cfg.get("opacity", 45)
-        )
-
-        fps = max(
-            1,
-            int(cfg.get("fps", 12))
-        )
+        width, height = (1080, 1920) if is_mobile else (1920, 1080)
+        font_size = int(cfg.get("font_size", 38 if is_mobile else 44))
+        line_spacing = int(cfg.get("line_spacing", 18 if is_mobile else 22))
+        pos_choice = cfg.get("position", "middle")
+        max_lines = max(1, int(cfg.get("max_lines", cfg.get("lines_per_page", 2))))
+        overlay_mode = cfg.get("overlay_mode", "Full Video Overlay")
+        rgba_color = hex_to_rgba(cfg.get("color", "#000000"), cfg.get("opacity", 45))
+        fps = max(1, int(cfg.get("fps", 12)))
 
         encoder = choose_encoder(cfg)
-
-        requested_workers = int(
-            cfg.get("render_workers", 0)
-        )
+        requested_workers = int(cfg.get("render_workers", 0))
 
         if requested_workers > 0:
             max_workers = requested_workers
-        elif encoder == "nvenc":
-            max_workers = 1
+        elif encoder in ("nvenc", "videotoolbox"):
+            max_workers = 2 if encoder == "videotoolbox" else 1
         else:
-            max_workers = min(
-                os.cpu_count() or 2,
-                4
-            )
+            max_workers = min(os.cpu_count() or 2, 4)
 
         supported_exts = [
             ".jpg", ".jpeg", ".png", ".webp",
             ".mp4", ".mov", ".mkv", ".avi", ".webm"
         ]
+        video_exts = [".mp4", ".mov", ".mkv", ".avi", ".webm"]
 
-        video_exts = [
-            ".mp4", ".mov", ".mkv", ".avi", ".webm"
-        ]
-
+        # Mac (.DS_Store) နှင့် Windows system files များကို ignore လုပ်ပေးထားသည်
         media_files = sorted(
             [
-                p
-                for p in Path(media_dir).iterdir()
-                if p.suffix.lower() in supported_exts
+                p for p in Path(media_dir).iterdir()
+                if p.is_file() and not p.name.startswith((".", "~$")) and p.suffix.lower() in supported_exts
             ]
         )
 
@@ -705,9 +672,7 @@ def render_all_clips(
                 f"No image/video files found in '{media_dir}'"
             )
 
-        static_overlay_png = (
-            temp_dir / "static_dimmer_overlay.png"
-        )
+        static_overlay_png = (temp_dir / "static_dimmer_overlay.png")
 
         create_static_dimmer_overlay(
             width,
@@ -723,53 +688,24 @@ def render_all_clips(
         tasks = []
         bgm_start_offset = 10.0
 
-        for row_number, (_, row) in enumerate(
-            df.iterrows()
-        ):
-            caption = (
-                str(row["caption"]).strip()
-                if str(row["caption"]) != "nan"
-                else ""
-            )
+        for row_number, (_, row) in enumerate(df.iterrows()):
+            caption = str(row["caption"]).strip() if str(row["caption"]) != "nan" else ""
+            mp3_name = str(row["mp3"]).strip()
+            audio_path = get_audio_path_fn(mp3_name)
 
-            mp3_name = str(
-                row["mp3"]
-            ).strip()
-
-            audio_path = get_audio_path_fn(
-                mp3_name
-            )
-
-            if not audio_path or not os.path.exists(
-                audio_path
-            ):
+            if not audio_path or not os.path.exists(audio_path):
                 continue
 
             try:
-                audio_info = mutagen.File(
-                    audio_path
-                )
-
-                audio_dur = max(
-                    float(audio_info.info.length),
-                    1.0
-                )
+                audio_info = mutagen.File(audio_path)
+                audio_dur = max(float(audio_info.info.length), 1.0)
             except Exception:
                 audio_dur = 5.0
 
-            media_path = media_files[
-                row_number % len(media_files)
-            ]
+            media_path = media_files[row_number % len(media_files)]
+            is_video_input = media_path.suffix.lower() in video_exts
 
-            is_video_input = (
-                media_path.suffix.lower()
-                in video_exts
-            )
-
-            blocks = parse_styled_blocks(
-                caption
-            )
-
+            blocks = parse_styled_blocks(caption)
             pages = paginate_strictly_by_lines(
                 blocks,
                 width=width,
@@ -780,33 +716,15 @@ def render_all_clips(
             if not pages:
                 pages = [[]]
 
-            clip_mp4 = (
-                temp_dir
-                / f"clip_{row_number:04d}.mp4"
-            )
-
-            include_bgm = (
-                row_number == 0
-                and bgm_path
-                and os.path.exists(bgm_path)
-            )
-
+            clip_mp4 = (temp_dir / f"clip_{row_number:04d}.mp4")
+            include_bgm = (row_number == 0 and bgm_path and os.path.exists(bgm_path))
             base_bg_jpg = None
 
             if not is_video_input:
-                cache_key = (
-                    str(media_path.resolve()),
-                    width,
-                    height,
-                    is_mobile,
-                )
+                cache_key = (str(media_path.resolve()), width, height, is_mobile)
 
                 if cache_key not in background_cache:
-                    cached_path = (
-                        temp_dir
-                        / f"bg_cache_{len(background_cache):04d}.jpg"
-                    )
-
+                    cached_path = (temp_dir / f"bg_cache_{len(background_cache):04d}.jpg")
                     prepare_final_image_layer(
                         media_path,
                         width,
@@ -814,74 +732,33 @@ def render_all_clips(
                         is_mobile,
                         str(cached_path),
                     )
+                    background_cache[cache_key] = cached_path
 
-                    background_cache[
-                        cache_key
-                    ] = cached_path
-
-                base_bg_jpg = background_cache[
-                    cache_key
-                ]
+                base_bg_jpg = background_cache[cache_key]
 
             num_pages = len(pages)
-
             page_char_counts = [
-                max(
-                    1,
-                    sum(
-                        len(
-                            b.get("text", "")
-                        )
-                        for b in page_blocks
-                    )
-                )
+                max(1, sum(len(b.get("text", "")) for b in page_blocks))
                 for page_blocks in pages
             ]
-
-            total_chars = sum(
-                page_char_counts
-            )
+            total_chars = sum(page_char_counts)
 
             page_timings = []
             accumulated_time = 0.0
 
-            for p_idx, count in enumerate(
-                page_char_counts
-            ):
+            for p_idx, count in enumerate(page_char_counts):
                 st = accumulated_time
-
                 if p_idx == num_pages - 1:
                     et = audio_dur
                 else:
-                    dur = (
-                        count
-                        / total_chars
-                    ) * audio_dur
-
-                    et = round(
-                        st + dur,
-                        3
-                    )
-
+                    dur = (count / total_chars) * audio_dur
+                    et = round(st + dur, 3)
                     accumulated_time = et
-
-                page_timings.append(
-                    (st, et)
-                )
+                page_timings.append((st, et))
 
             page_pngs = []
-
-            for p_idx, page_blocks in enumerate(
-                pages
-            ):
-                p_png = (
-                    temp_dir
-                    / (
-                        f"cap_{row_number:04d}"
-                        f"_p{p_idx}.png"
-                    )
-                )
-
+            for p_idx, page_blocks in enumerate(pages):
+                p_png = temp_dir / f"cap_{row_number:04d}_p{p_idx}.png"
                 render_blocks_to_image(
                     page_blocks,
                     width,
@@ -892,143 +769,70 @@ def render_all_clips(
                     is_mobile,
                     str(p_png),
                 )
-
                 page_pngs.append(p_png)
 
             inputs = []
-
             if not is_video_input:
-                inputs += [
-                    "-loop", "1",
-                    "-framerate", str(fps),
-                    "-i", str(base_bg_jpg)
-                ]
+                inputs += ["-loop", "1", "-framerate", str(fps), "-i", str(base_bg_jpg)]
             else:
-                inputs += [
-                    "-stream_loop", "-1",
-                    "-i", str(media_path)
-                ]
+                inputs += ["-stream_loop", "-1", "-i", str(media_path)]
 
-            inputs += [
-                "-loop", "1",
-                "-framerate", str(fps),
-                "-i", str(static_overlay_png)
-            ]
+            inputs += ["-loop", "1", "-framerate", str(fps), "-i", str(static_overlay_png)]
 
             for p_png in page_pngs:
-                inputs += [
-                    "-loop", "1",
-                    "-framerate", str(fps),
-                    "-i", str(p_png)
-                ]
+                inputs += ["-loop", "1", "-framerate", str(fps), "-i", str(p_png)]
 
-            inputs += [
-                "-i", str(audio_path)
-            ]
-
-            audio_in_idx = (
-                2 + num_pages
-            )
-
+            inputs += ["-i", str(audio_path)]
+            audio_in_idx = 2 + num_pages
             bgm_in_idx = None
 
             if include_bgm:
-                inputs += [
-                    "-stream_loop", "-1",
-                    "-i", str(bgm_path)
-                ]
-                bgm_in_idx = (
-                    audio_in_idx + 1
-                )
+                inputs += ["-stream_loop", "-1", "-i", str(bgm_path)]
+                bgm_in_idx = audio_in_idx + 1
 
             # ----------------------------------------------------
-            # Video filter graph (With Fade-In Caption Animation)
+            # Video filter graph
             # ----------------------------------------------------
             filter_parts = []
-
             if is_video_input:
                 filter_parts.append(
-                    f"[0:v]"
-                    f"scale={width}:{height}:"
-                    f"force_original_aspect_ratio=increase,"
-                    f"crop={width}:{height},"
-                    f"fps={fps}"
-                    f"[base]"
+                    f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                    f"crop={width}:{height},fps={fps}[base]"
                 )
                 last_v = "[base]"
             else:
                 last_v = "[0:v]"
 
-            filter_parts.append(
-                f"{last_v}[1:v]"
-                f"overlay=0:0"
-                f"[bg_dim]"
-            )
-
+            filter_parts.append(f"{last_v}[1:v]overlay=0:0[bg_dim]")
             last_bg = "[bg_dim]"
-            fade_dur = 0.35  # Caption Fade-in ကြာချိန် (0.35s)
+            fade_dur = 0.35
 
             for p_idx in range(num_pages):
                 st, et = page_timings[p_idx]
                 in_idx = 2 + p_idx
+                next_bg = f"[v_step_{p_idx}]" if p_idx < num_pages - 1 else "[v]"
 
-                next_bg = (
-                    f"[v_step_{p_idx}]"
-                    if p_idx < num_pages - 1
-                    else "[v]"
-                )
-
-                # Page အသစ်စတိုင်း 0.35s Fade-In transition ထည့်သွင်းခြင်း
                 filter_parts.append(
                     f"[{in_idx}:v]format=yuva420p,fade=t=in:st={st}:d={fade_dur}:alpha=1[cap_anim_{p_idx}]"
                 )
-
-                overlay_step = (
-                    f"{last_bg}"
-                    f"[cap_anim_{p_idx}]"
-                    f"overlay=0:0:"
-                    f"enable='between(t,{st},{et})'"
-                    f"{next_bg}"
-                )
-
                 filter_parts.append(
-                    overlay_step
+                    f"{last_bg}[cap_anim_{p_idx}]overlay=0:0:enable='between(t,{st},{et})'{next_bg}"
                 )
-
                 last_bg = next_bg
 
             if include_bgm:
                 audio_filter = (
-                    f"[{audio_in_idx}:a]"
-                    f"volume=1.0[v_main];"
-                    f"[{bgm_in_idx}:a]"
-                    f"atrim=start={bgm_start_offset},"
-                    f"asetpts=PTS-STARTPTS,"
-                    f"volume=0.35[v_bgm];"
-                    f"[v_main][v_bgm]"
-                    f"amix=inputs=2:"
-                    f"duration=first:"
-                    f"dropout_transition=2"
-                    f"[aout]"
+                    f"[{audio_in_idx}:a]volume=1.0[v_main];"
+                    f"[{bgm_in_idx}:a]atrim=start={bgm_start_offset},asetpts=PTS-STARTPTS,volume=0.35[v_bgm];"
+                    f"[v_main][v_bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
                 )
-
-                filter_parts.append(
-                    audio_filter
-                )
-
+                filter_parts.append(audio_filter)
                 a_map = "[aout]"
             else:
-                a_map = (
-                    f"{audio_in_idx}:a"
-                )
+                a_map = f"{audio_in_idx}:a"
 
-            filter_str = ";".join(
-                filter_parts
-            )
-
-            v_encoder_args = encoder_args(
-                encoder
-            )
+            filter_str = ";".join(filter_parts)
+            v_encoder_args = encoder_args(encoder)
 
             cmd = [
                 "ffmpeg",
@@ -1036,8 +840,7 @@ def render_all_clips(
                 "-hide_banner",
                 "-loglevel", "error",
             ] + inputs + [
-                "-filter_complex",
-                filter_str,
+                "-filter_complex", filter_str,
                 "-map", "[v]",
                 "-map", a_map,
                 "-r", str(fps),
@@ -1049,102 +852,45 @@ def render_all_clips(
                 str(clip_mp4),
             ]
 
-            tasks.append(
-                (cmd, clip_mp4)
-            )
+            tasks.append((cmd, clip_mp4))
 
         if not tasks:
-            return (
-                False,
-                "No valid audio clips were found."
-            )
+            return (False, "No valid audio clips were found.")
 
-        progress_cb(
-            f"Rendering with {encoder.upper()} "
-            f"({max_workers} worker"
-            f"{'s' if max_workers != 1 else ''})...",
-            15
-        )
+        progress_cb(f"Rendering with {encoder.upper()} ({max_workers} workers)...", 15)
 
         rendered_clips = []
         completed = 0
         first_error = ""
 
-        with ThreadPoolExecutor(
-            max_workers=max_workers
-        ) as executor:
-
-            futures = [
-                executor.submit(
-                    render_single_task,
-                    task
-                )
-                for task in tasks
-            ]
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(render_single_task, task) for task in tasks]
 
             for future in futures:
-                clip_path, error_text = (
-                    future.result()
-                )
-
+                clip_path, error_text = future.result()
                 completed += 1
-
                 progress_cb(
                     f"Rendered {completed}/{len(tasks)} clips...",
-                    15 + int(
-                        (
-                            completed
-                            / len(tasks)
-                        ) * 75
-                    )
+                    15 + int((completed / len(tasks)) * 75)
                 )
 
                 if clip_path:
-                    rendered_clips.append(
-                        clip_path
-                    )
+                    rendered_clips.append(clip_path)
                 elif not first_error:
                     first_error = error_text
 
         if not rendered_clips:
-            detail = (
-                f"\n\nFFmpeg error:\n{first_error}"
-                if first_error
-                else ""
-            )
+            detail = f"\n\nFFmpeg error:\n{first_error}" if first_error else ""
+            return (False, "Failed to render clips. Please check source assets." + detail)
 
-            return (
-                False,
-                "Failed to render clips. "
-                "Please check source assets."
-                + detail
-            )
+        progress_cb("Merging into final video...", 95)
 
-        progress_cb(
-            "Merging into final video...",
-            95
-        )
-
-        concat_txt = (
-            temp_dir / "concat_list.txt"
-        )
-
-        with open(
-            concat_txt,
-            "w",
-            encoding="utf-8"
-        ) as f:
+        concat_txt = temp_dir / "concat_list.txt"
+        with open(concat_txt, "w", encoding="utf-8") as f:
             for c in rendered_clips:
-                safe_path = str(
-                    c.resolve()
-                ).replace(
-                    "'",
-                    "'\\''"
-                )
-
-                f.write(
-                    f"file '{safe_path}'\n"
-                )
+                # Windows path compatibility for FFmpeg concat safe format
+                safe_path = str(c.resolve()).replace("\\", "/")
+                f.write(f"file '{safe_path}'\n")
 
         merge_cmd = [
             "ffmpeg",
@@ -1167,28 +913,13 @@ def render_all_clips(
         )
 
         if res.returncode != 0:
-            return (
-                False,
-                "Error during final video "
-                "concatenation:\n"
-                + res.stderr[-5000:]
-            )
+            return (False, f"Error during final video concatenation:\n{res.stderr[-5000:]}")
 
-        progress_cb(
-            "Rendering Complete!",
-            100
-        )
-
-        return (
-            True,
-            str(output_file)
-        )
+        progress_cb("Rendering Complete!", 100)
+        return (True, str(output_file))
 
     except Exception as e:
         return False, str(e)
 
     finally:
-        shutil.rmtree(
-            temp_dir,
-            ignore_errors=True
-        )
+        shutil.rmtree(temp_dir, ignore_errors=True)

@@ -36,8 +36,8 @@ class BackendAPI:
 
     def resolve_bgm_path(self):
         bgm_candidates = [
-            BASE_DIR / "assets" / "dhamma_bgm.mp3.mp3",
             BASE_DIR / "assets" / "dhamma_bgm.mp3",
+            BASE_DIR / "assets" / "dhamma_bgm.mp3.mp3",
             BASE_DIR / "dhamma_bgm.mp3",
         ]
         self.bgm_path = ""
@@ -164,7 +164,10 @@ class BackendAPI:
         return {"success": False, "error": "Audio file not found."}
 
     def stop_audio(self):
-        pygame.mixer.music.stop()
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
         return {"success": True}
 
     def update_row_data(self, idx, mp3, caption):
@@ -200,7 +203,6 @@ class BackendAPI:
 
         self.resolve_bgm_path()
 
-        # Config default fallback sanity check
         if isinstance(config, dict):
             config["max_lines"] = int(config.get("max_lines", config.get("lines_per_page", 2)))
 
@@ -249,4 +251,4 @@ if __name__ == "__main__":
     )
     api.set_window(window)
 
-    webview.start(debug=True)
+    webview.start(debug=False)
