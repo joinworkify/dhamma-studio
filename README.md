@@ -3,21 +3,21 @@
 A modern desktop application built with Python, pywebview, and FFmpeg designed for audio/caption QA verification, rich-text styling, and automated batch video generation with full Myanmar Unicode font support.
 
 ---
-
 ## ✨ Key Features
 
 - **Audio & Caption QA:** Inspect audio synchronization with Myanmar text, calculate audio durations, and flag sync mismatches or missing files.
 - **Audio Playback:** Built-in player with **Spacebar** hotkey support for rapid auditing.
-- **Visual Text Styling Toolbar:** Apply inline highlight boxes (custom background & border colors) and text stroke outlines directly inside the editor.
-- **Smart Dynamic Pagination:** Automatically splits long captions (capped at 4 lines per page) and syncs page durations weighted by character length.
-- **Automated Video Generation:** Batch render video clips combining background images/videos, styled text overlays, and audio tracks via FFmpeg.
-- **Background Music Integration:** Automatic BGM track detection (`assets/dhamma_bgm.mp3`) with custom start-offset trimming and volume balance.
-- **Flexible Formats:** Supports Landscape (16:9 / 1920x1080) and Mobile/Shorts (9:16 / 1080x1920).
-- **Customizable Styling:** Adjust overlay mode (Full vs Box), background opacity, text vertical positioning, font size, and line spacing.
-- **Cross-Platform:** Native desktop GUI support across Linux, Windows, and macOS.
+- **Visual Text Styling Toolbar:** Apply inline highlight boxes (custom background & border colors) and text stroke outlines directly inside the live editor.
+- **AI Semantic Image Matching:** Integrates OpenAI's CLIP model (`clip-ViT-B-32`) to analyze caption semantics and automatically pair each scene with the most visually relevant image/video.
+- **Incremental Embedding Cache:** Scans media assets incrementally (`.clip_embeddings_cache.pt`), caching vectors locally so subsequent renders start instantly.
+- **Intelligent Non-Duplication:** Tracks used media paths across scenes to avoid repetitive back-to-back imagery while recycling assets dynamically when depleted.
+- **Continuous Line Stream Engine:** Eliminates orphaned single lines across slide transitions by maintaining a continuous line queue (e.g., exactly 3 lines per slide) and seamlessly cross-syncing audio slices across CSV rows.
+- **Intro Clip Isolation & BGM Toggle:** Isolates title/intro scenes when background music is enabled, with user-controlled BGM toggle support in the UI.
+- **Flexible Formats:** Supports Landscape (16:9 / 1920x1080) and Mobile/Shorts (9:16 / 1080x1920 with background blur effects).
+- **Customizable Styling:** Adjust overlay mode (Full vs Box), background opacity, text vertical positioning, font size, line spacing, and corner logo placement with safe margins.
+- **Cross-Platform:** Native desktop GUI support across Linux, Windows, and macOS with automatic hardware encoder detection (NVENC, VideoToolbox, QSV, and CPU libx264).
 
 ---
-
 ## 🛠️ System Prerequisites
 
 ### 1. FFmpeg Installation
@@ -108,9 +108,9 @@ Press Spacebar or click Play to listen to the audio track.
 
 Use the Visual Toolbar to highlight text with custom fill/border boxes or apply text stroke outlines.
 
-Click Save Row to apply changes.
+Click Save Row to apply modifications.
 
-Click Next Issue to quickly jump to duration or missing file warnings.
+Click Next Issue to jump directly to duration mismatches or missing file warnings.
 
 Click Export Cleaned CSV to export your formatted and verified dataset.
 
@@ -123,11 +123,13 @@ Configure video preferences:
 
 Format: Landscape (16:9) or Mobile/Shorts (9:16).
 
-Overlay Mode: Full Video Overlay, Text Box Only, or None.
+Lines Per Page: Set fixed line count (e.g., 2 or 3 lines) to maintain consistent row layouts.
 
 Position & Layout: Top, Center, or Bottom text alignment.
 
-Typography: Font size, line spacing, overlay color, and opacity.
+Typography & Overlay: Font size, line spacing, overlay color, and opacity.
+
+Background Music: Toggle the BGM checkbox to enable or disable intro audio mixing.
 
 Click Start Video Rendering to generate the final synchronized video.
 
@@ -136,10 +138,14 @@ pywebview - Cross-platform desktop GUI runtime
 
 PyQt6 - GUI engine fallback for Linux/Windows
 
-pygame - Audio playback engine
+sentence-transformers & torch - CLIP-based AI vision and semantic text-to-image matching
 
-pandas - CSV parsing and dataset management
+scikit-learn - Similarity score calculations and vector indexing
 
-mutagen - Audio metadata and duration calculation
+pygame - Low-latency audio playback engine for QA auditing
 
-Pillow - Text layout, font rasterization, and overlay generation
+pandas - CSV parsing, batch data traversal, and dataset management
+
+mutagen - Audio metadata inspection and duration calculation
+
+Pillow - Text layout, RAQM complex script font shaping, and overlay generation
