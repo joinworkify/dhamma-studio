@@ -397,6 +397,8 @@ async function startRender() {
   if (!window.pywebview?.api) return;
   await saveQARowSilently();
 
+  const bgmCheckbox = document.getElementById('gen-enable-bgm');
+
   const cfg = {
     format: document.getElementById('gen-format')?.value || 'landscape',
     position: document.getElementById('gen-position')?.value || 'middle',
@@ -407,6 +409,7 @@ async function startRender() {
     overlay_mode: document.getElementById('gen-overlay-mode')?.value || 'Full Video Overlay',
     color: document.getElementById('gen-color')?.value || '#000000',
     opacity: document.getElementById('gen-opacity')?.value || '50',
+    enable_bgm: bgmCheckbox ? bgmCheckbox.checked : true,
   };
 
   const statusContainer = document.getElementById('render-status-container');

@@ -53,13 +53,14 @@ class BackendAPI:
         result = self.window.create_file_dialog(
             webview.FileDialog.FOLDER, allow_multiple=False
         )
-        if result and len(result) > 0:
-            folder = result[0]
+        if result:
+            folder = result[0] if isinstance(result, (list, tuple)) else result
+            folder_str = str(folder)
             if dialog_type == "images":
-                self.images_dir = folder
+                self.images_dir = folder_str
             elif dialog_type == "audios":
-                self.audios_dir = folder
-            return {"success": True, "path": folder}
+                self.audios_dir = folder_str
+            return {"success": True, "path": folder_str}
         return {"success": False, "path": ""}
 
     def select_file(self, file_type):
@@ -70,7 +71,7 @@ class BackendAPI:
                 file_types=("CSV Files (*.csv)", "All Files (*.*)"),
             )
             if result and len(result) > 0:
-                self.csv_path = result[0]
+                self.csv_path = str(result[0])
                 return self.load_csv_data(self.csv_path)
         elif file_type == "logo":
             result = self.window.create_file_dialog(
@@ -79,7 +80,7 @@ class BackendAPI:
                 file_types=("Image Files (*.png;*.jpg;*.jpeg;*.webp)", "All Files (*.*)"),
             )
             if result and len(result) > 0:
-                self.logo_path = result[0]
+                self.logo_path = str(result[0])
                 return {"success": True, "path": self.logo_path}
         elif file_type == "output":
             result = self.window.create_file_dialog(
