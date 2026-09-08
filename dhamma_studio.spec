@@ -14,6 +14,24 @@ datas = [("static", "static"), ("fonts", "fonts")]
 binaries = []
 hiddenimports = []
 
+# Bundled ffmpeg (fetched by scripts/fetch_ffmpeg_mac.sh or
+# scripts/fetch_ffmpeg_windows.ps1 into vendor/ffmpeg/<platform>/) so the
+# packaged app doesn't depend on ffmpeg being on the user's PATH.
+if sys.platform == "darwin":
+    ffmpeg_src = Path("vendor/ffmpeg/mac/ffmpeg")
+elif sys.platform == "win32":
+    ffmpeg_src = Path("vendor/ffmpeg/windows/ffmpeg.exe")
+else:
+    ffmpeg_src = Path("vendor/ffmpeg/linux/ffmpeg")
+
+if ffmpeg_src.exists():
+    # Added via `datas`, not `binaries`: it's a standalone CLI tool to copy
+    # as-is, not a shared library PyInstaller should rewrite link paths for.
+    datas.append((str(ffmpeg_src), "ffmpeg-bin"))
+else:
+    print(f"WARNING: {ffmpeg_src} not found — building without bundled ffmpeg "
+          f"(app will fall back to ffmpeg on PATH at runtime).")
+
 # These packages do dynamic/lazy imports and ship non-.py data (model configs,
 # compiled extensions) that PyInstaller's static analysis can't see on its own.
 for pkg in (

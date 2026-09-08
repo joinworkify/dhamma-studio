@@ -7,9 +7,8 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    Write-Warning "ffmpeg not found on PATH. It is NOT bundled into the .exe -- users must install it separately for rendering to work."
-}
+Write-Host "Fetching ffmpeg for bundling..."
+& "$PSScriptRoot\fetch_ffmpeg_windows.ps1"
 
 Write-Host "Syncing dependencies (including build group)..."
 uv sync --group build

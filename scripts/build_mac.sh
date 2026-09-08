@@ -8,10 +8,8 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "Warning: ffmpeg not found on PATH. It is NOT bundled into the .app —" >&2
-    echo "users must install it separately (brew install ffmpeg) for rendering to work." >&2
-fi
+echo "Fetching ffmpeg for bundling..."
+./scripts/fetch_ffmpeg_mac.sh
 
 echo "Syncing dependencies (including build group)..."
 uv sync --group build
