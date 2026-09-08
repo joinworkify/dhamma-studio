@@ -1,7 +1,8 @@
 let currentTab = 'qa';
 let qaRows = [];
 let currentQAIndex = 0;
-let isPlaying = false;
+let isAudioPlaying = false;
+let audioClockInterval = null;
 
 function switchTab(tab) {
   currentTab = tab;
@@ -37,28 +38,66 @@ function adjustDefaultFontSettings() {
   }
 }
 
-async function browseCSV() {
+// ============================================================
+// 1. OPTION A: NEW TEXT + MP3
+// ============================================================
+
+async function loadTextAndMp3() {
   if (!window.pywebview?.api) return;
-  const res = await window.pywebview.api.select_file('csv');
+  const btn = document.getElementById('btn-load-unified');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "⏳ Loading...";
+  }
+
+  const res = await window.pywebview.api.load_txt_and_mp3();
+  if (btn) {
+    btn.disabled = false;
+    btn.innerText = "⚡ New: Text + MP3";
+  }
+
   if (res && res.success) {
-    document.getElementById('label-csv-path').innerText = res.path;
     qaRows = res.rows || [];
     currentQAIndex = 0;
     document.getElementById('qa-editor-card').classList.remove('hidden');
     displayQARow();
+    resetAudioClock();
+    alert(`Loaded ${res.total} sentences from text file!\nPress Space to Play/Pause, and Enter to Stamp.`);
   } else if (res && res.error) {
     alert(res.error);
   }
 }
 
-async function browseAudios() {
+// ============================================================
+// 2. OPTION B: OPEN CLEANED CSV
+// ============================================================
+
+async function browseCSV() {
   if (!window.pywebview?.api) return;
-  const res = await window.pywebview.api.select_folder('audios');
+  const res = await window.pywebview.api.select_file('csv');
   if (res && res.success) {
-    document.getElementById('label-audios-path').innerText = res.path;
-    if (qaRows.length > 0) {
-      displayQARow();
-    }
+    qaRows = res.rows || [];
+    currentQAIndex = 0;
+    document.getElementById('qa-editor-card').classList.remove('hidden');
+    displayQARow();
+    resetAudioClock();
+    alert(`Loaded CSV with ${res.total} rows.\nAudio: ${res.audio_filename || "Please click 'Select MP3' to connect"}`);
+  } else if (res && res.error) {
+    alert(res.error);
+  }
+}
+
+async function browseSingleAudioFile() {
+  if (!window.pywebview?.api) return;
+  const res = await window.pywebview.api.select_audio_file();
+  if (res && res.success) {
+    qaRows.forEach(r => r.mp3 = res.audio_name);
+    const mp3In = document.getElementById('qa-mp3-input');
+    if (mp3In) mp3In.value = res.audio_name;
+
+    resetAudioClock();
+    displayQARow();
+    alert(`Connected Audio: ${res.audio_name}\nYou can now Play/Pause and Sync.`);
   }
 }
 
@@ -86,13 +125,133 @@ async function browseOutput() {
   }
 }
 
+// ============================================================
+// AUDIO CONTROLS (PLAY / PAUSE / REWIND / TIME TRACKER)
+// ============================================================
+
+async function toggleMasterPlay() {
+  if (!window.pywebview?.api || qaRows.length === 0) return;
+
+  const res = await window.pywebview.api.play_or_pause_audio();
+  if (res && res.success) {
+    updateMasterPlayUI(res.state === "playing");
+    if (res.state === "playing") {
+      startAudioClock();
+    } else {
+      stopAudioClock();
+      updateClockDisplay(res.current_sec);
+    }
+  } else if (res && res.error) {
+    alert(res.error);
+  }
+}
+
+async function seekAudioRelative(offset) {
+  if (!window.pywebview?.api || qaRows.length === 0) return;
+  const res = await window.pywebview.api.seek_audio_relative(offset);
+  if (res && res.success) {
+    updateMasterPlayUI(res.state === "playing");
+    updateClockDisplay(res.current_sec);
+    if (res.state === "playing") startAudioClock();
+  }
+}
+
+function updateMasterPlayUI(playing) {
+  isAudioPlaying = playing;
+  const icon = document.getElementById('btn-master-icon');
+  const txt = document.getElementById('btn-master-text');
+  const btn = document.getElementById('btn-master-play');
+
+  if (playing) {
+    if (icon) icon.innerText = "⏸";
+    if (txt) txt.innerText = "Pause";
+    if (btn) btn.style.backgroundColor = "#d97706";
+  } else {
+    if (icon) icon.innerText = "▶";
+    if (txt) txt.innerText = "Play Audio";
+    if (btn) btn.style.backgroundColor = "#059669";
+  }
+}
+
+function startAudioClock() {
+  if (audioClockInterval) clearInterval(audioClockInterval);
+  audioClockInterval = setInterval(async () => {
+    const sec = await window.pywebview.api.get_current_audio_sec();
+    if (sec !== undefined) {
+      updateClockDisplay(sec);
+    }
+  }, 100);
+}
+
+function stopAudioClock() {
+  if (audioClockInterval) clearInterval(audioClockInterval);
+}
+
+function resetAudioClock() {
+  stopAudioClock();
+  updateMasterPlayUI(false);
+  updateClockDisplay(0.0);
+}
+
+function updateClockDisplay(sec) {
+  const clock = document.getElementById('live-audio-clock');
+  if (clock) {
+    clock.innerText = `${parseFloat(sec).toFixed(2)}s`;
+  }
+}
+
+// ============================================================
+// STAMP & NEXT (ENTER KEY ACTION)
+// ============================================================
+
+async function stampAndGoNext() {
+  if (qaRows.length === 0 || !window.pywebview?.api) return;
+
+  const currentSec = await window.pywebview.api.get_current_audio_sec();
+
+  document.getElementById('qa-end-time').value = currentSec;
+  syncCurrentInputsToMemory();
+
+  await saveQARowSilently();
+
+  if (currentQAIndex < qaRows.length - 1) {
+    qaRows[currentQAIndex + 1].start_time = currentSec;
+    currentQAIndex++;
+    displayQARow();
+  } else {
+    alert("🎉 All lines in dataset stamped successfully!");
+  }
+}
+
+async function previewCurrentSegment() {
+  if (qaRows.length === 0 || !window.pywebview?.api) return;
+  const st = parseFloat(document.getElementById('qa-start-time')?.value) || 0.0;
+  const et = parseFloat(document.getElementById('qa-end-time')?.value) || 0.0;
+
+  if (et <= st) {
+    alert("Please stamp or enter an End Time greater than Start Time.");
+    return;
+  }
+
+  await window.pywebview.api.play_segment_preview(st, et);
+}
+
+// ============================================================
+// DISPLAY & VISUAL STYLING
+// ============================================================
+
 function syncCurrentInputsToMemory() {
   if (qaRows.length === 0) return;
   const mp3 = document.getElementById('qa-mp3-input')?.value.trim() || '';
   const editor = document.getElementById('qa-caption-editor');
   const cap = editor ? editor.innerHTML : '';
+  const st = parseFloat(document.getElementById('qa-start-time')?.value) || 0.0;
+  const et = parseFloat(document.getElementById('qa-end-time')?.value) || 0.0;
+
   qaRows[currentQAIndex].mp3 = mp3;
   qaRows[currentQAIndex].caption = cap;
+  qaRows[currentQAIndex].start_time = st;
+  qaRows[currentQAIndex].end_time = et;
 }
 
 function displayQARow() {
@@ -103,9 +262,22 @@ function displayQARow() {
   const mp3In = document.getElementById('qa-mp3-input');
   const badge = document.getElementById('qa-sync-badge');
   const editor = document.getElementById('qa-caption-editor');
+  const stIn = document.getElementById('qa-start-time');
+  const etIn = document.getElementById('qa-end-time');
+  const nextPreview = document.getElementById('qa-next-line-preview');
 
   if (rowInd) rowInd.innerText = `Row ${currentQAIndex + 1} of ${qaRows.length}`;
   if (mp3In) mp3In.value = row.mp3 || '';
+  if (stIn) stIn.value = row.start_time !== undefined ? row.start_time : 0.0;
+  if (etIn) etIn.value = row.end_time !== undefined ? row.end_time : 0.0;
+
+  if (nextPreview) {
+    if (currentQAIndex + 1 < qaRows.length) {
+      nextPreview.innerText = qaRows[currentQAIndex + 1].caption.replace(/<[^>]+>/g, '') || '-';
+    } else {
+      nextPreview.innerText = "(End of text)";
+    }
+  }
 
   let cap = row.caption || '';
   if (editor) {
@@ -121,25 +293,17 @@ function displayQARow() {
   }
 
   if (badge) {
-    if (row.status === 'missing') {
-      badge.style.backgroundColor = '#450a0a';
-      badge.style.color = '#f87171';
-      badge.innerText = "❌ Missing Audio File";
-    } else if (row.status === 'too_short') {
-      badge.style.backgroundColor = '#451a03';
-      badge.style.color = '#fbbf24';
-      badge.innerText = `⚠️ Duration Too Short (${row.duration}s)`;
-    } else if (row.status === 'too_long') {
-      badge.style.backgroundColor = '#451a03';
-      badge.style.color = '#fbbf24';
-      badge.innerText = `⚠️ Duration Too Long (${row.duration}s)`;
-    } else {
+    const dur = Math.max(0, (row.end_time - row.start_time)).toFixed(2);
+    if (row.end_time > 0) {
       badge.style.backgroundColor = '#022c22';
       badge.style.color = '#34d399';
-      badge.innerText = `✅ In Sync (${row.duration}s)`;
+      badge.innerText = `✅ Synced (${dur}s) [${row.start_time}s - ${row.end_time}s]`;
+    } else {
+      badge.style.backgroundColor = '#1f2937';
+      badge.style.color = '#94a3b8';
+      badge.innerText = `⏳ Pending Sync`;
     }
   }
-  stopAudioState();
 }
 
 function applyBoxToSelection() {
@@ -164,19 +328,15 @@ function applyBoxToSelection() {
     targetNode.setAttribute('data-bc', bc);
     targetNode.style.backgroundColor = bg;
     targetNode.style.border = `3px solid ${bc}`;
-    targetNode.style.textShadow = 'none';
     targetNode.style.padding = '4px 12px';
-    targetNode.style.margin = '3px 0';
-    targetNode.style.display = 'inline-block';
     targetNode.style.borderRadius = '4px';
-    targetNode.style.fontWeight = 'bold';
     syncCurrentInputsToMemory();
     saveQARowSilently();
     return;
   }
 
   if (!selectedText.trim()) {
-    alert("Please select the text in the Caption Editor first.");
+    alert("Please select words inside Caption Editor first.");
     return;
   }
 
@@ -187,18 +347,15 @@ function applyBoxToSelection() {
   span.style.backgroundColor = bg;
   span.style.border = `3px solid ${bc}`;
   span.style.color = '#ffffff';
-  span.style.textShadow = 'none';
   span.style.padding = '4px 12px';
-  span.style.margin = '3px 0';
-  span.style.display = 'inline-block';
   span.style.borderRadius = '4px';
-  span.style.fontWeight = 'bold';
+  span.style.display = 'inline-block';
   span.textContent = selectedText;
 
   range.deleteContents();
   range.insertNode(span);
-
   selection.removeAllRanges();
+
   syncCurrentInputsToMemory();
   saveQARowSilently();
 }
@@ -225,10 +382,6 @@ function applyOutlineToSelection() {
     targetNode.setAttribute('data-c', c);
     targetNode.style.backgroundColor = 'transparent';
     targetNode.style.border = 'none';
-    targetNode.style.padding = '0';
-    targetNode.style.margin = '0';
-    targetNode.style.display = 'inline';
-    targetNode.style.fontWeight = 'normal';
     targetNode.style.textShadow = `-2px -2px 0 ${c}, 2px -2px 0 ${c}, -2px 2px 0 ${c}, 2px 2px 0 ${c}`;
     syncCurrentInputsToMemory();
     saveQARowSilently();
@@ -236,7 +389,7 @@ function applyOutlineToSelection() {
   }
 
   if (!selectedText.trim()) {
-    alert("Please select the text in the Caption Editor first.");
+    alert("Please select words inside Caption Editor first.");
     return;
   }
 
@@ -250,8 +403,8 @@ function applyOutlineToSelection() {
 
   range.deleteContents();
   range.insertNode(span);
-
   selection.removeAllRanges();
+
   syncCurrentInputsToMemory();
   saveQARowSilently();
 }
@@ -268,23 +421,6 @@ function removeStyleFromSelection() {
     const textNode = document.createTextNode(selectedText);
     range.deleteContents();
     range.insertNode(textNode);
-  } else if (range) {
-    let node = range.commonAncestorContainer;
-    if (node.nodeType === Node.TEXT_NODE) {
-      node = node.parentElement;
-    }
-    if (node && node !== editor && node.getAttribute('data-style')) {
-      const textNode = document.createTextNode(node.innerText);
-      node.replaceWith(textNode);
-    } else {
-      const plainText = editor.innerText;
-      const lines = plainText.split('\n').filter(l => l.trim() !== '');
-      if (lines.length > 0) {
-        editor.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
-      } else {
-        editor.innerHTML = '<div></div>';
-      }
-    }
   } else {
     const plainText = editor.innerText;
     editor.innerHTML = `<div>${plainText}</div>`;
@@ -298,23 +434,25 @@ function removeStyleFromSelection() {
 async function saveQARowSilently() {
   if (qaRows.length === 0 || !window.pywebview?.api) return;
   syncCurrentInputsToMemory();
-  const mp3 = qaRows[currentQAIndex].mp3;
-  const cap = qaRows[currentQAIndex].caption;
-  await window.pywebview.api.update_row_data(currentQAIndex, mp3, cap);
+  const row = qaRows[currentQAIndex];
+  await window.pywebview.api.update_row_data(
+    currentQAIndex, row.mp3, row.caption, row.start_time || 0.0, row.end_time || 0.0
+  );
 }
 
 async function saveQARow() {
   if (qaRows.length === 0 || !window.pywebview?.api) return;
   syncCurrentInputsToMemory();
-  const mp3 = qaRows[currentQAIndex].mp3;
-  const cap = qaRows[currentQAIndex].caption;
+  const row = qaRows[currentQAIndex];
 
-  const res = await window.pywebview.api.update_row_data(currentQAIndex, mp3, cap);
+  const res = await window.pywebview.api.update_row_data(
+    currentQAIndex, row.mp3, row.caption, row.start_time || 0.0, row.end_time || 0.0
+  );
   if (res && res.success) {
     qaRows[currentQAIndex].status = res.status;
     qaRows[currentQAIndex].duration = res.duration;
     displayQARow();
-    alert("Saved successfully!");
+    alert("Saved row successfully!");
   }
 }
 
@@ -337,51 +475,13 @@ async function nextQARow() {
 async function jumpNextIssue() {
   await saveQARowSilently();
   for (let i = currentQAIndex + 1; i < qaRows.length; i++) {
-    if (qaRows[i].status !== 'ok') {
+    if (!qaRows[i].end_time || qaRows[i].end_time <= qaRows[i].start_time) {
       currentQAIndex = i;
       displayQARow();
       return;
     }
   }
-  for (let i = 0; i <= currentQAIndex; i++) {
-    if (qaRows[i].status !== 'ok') {
-      currentQAIndex = i;
-      displayQARow();
-      return;
-    }
-  }
-  alert("No more warnings or issues found.");
-}
-
-async function toggleAudio() {
-  if (!window.pywebview?.api || qaRows.length === 0) return;
-  const btn = document.getElementById('qa-play-btn');
-
-  if (isPlaying) {
-    await window.pywebview.api.stop_audio();
-    stopAudioState();
-  } else {
-    const mp3 = document.getElementById('qa-mp3-input')?.value.trim() || '';
-    const res = await window.pywebview.api.play_audio(mp3);
-    if (res && res.success) {
-      isPlaying = true;
-      if (btn) {
-        btn.innerHTML = `<span>⏹ Stop</span> <span style="background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: monospace;">Space</span>`;
-        btn.style.backgroundColor = '#dc2626';
-      }
-    } else {
-      alert(res?.error || "Cannot play audio file.");
-    }
-  }
-}
-
-function stopAudioState() {
-  isPlaying = false;
-  const btn = document.getElementById('qa-play-btn');
-  if (btn) {
-    btn.innerHTML = `<span>▶ Play</span> <span style="background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-family: monospace;">Space</span>`;
-    btn.style.backgroundColor = '#059669';
-  }
+  alert("All rows have timestamps assigned!");
 }
 
 async function exportCleanedCSV() {
@@ -389,7 +489,7 @@ async function exportCleanedCSV() {
   await saveQARowSilently();
   const res = await window.pywebview.api.export_cleaned_csv();
   if (res && res.success) {
-    alert(`Cleaned CSV saved successfully:\n${res.path}`);
+    alert(`Cleaned CSV exported to:\n${res.path}`);
   }
 }
 
@@ -404,8 +504,8 @@ async function startRender() {
     position: document.getElementById('gen-position')?.value || 'middle',
     font_size: parseInt(document.getElementById('gen-font-size')?.value) || 44,
     line_spacing: parseInt(document.getElementById('gen-line-spacing')?.value) || 22,
-    max_lines: parseInt(document.getElementById('gen-max-lines')?.value) || 2,
-    lines_per_page: parseInt(document.getElementById('gen-max-lines')?.value) || 2,
+    max_lines: parseInt(document.getElementById('gen-max-lines')?.value) || 3,
+    lines_per_page: parseInt(document.getElementById('gen-max-lines')?.value) || 3,
     overlay_mode: document.getElementById('gen-overlay-mode')?.value || 'Full Video Overlay',
     color: document.getElementById('gen-color')?.value || '#000000',
     opacity: document.getElementById('gen-opacity')?.value || '50',
@@ -456,24 +556,48 @@ window.renderFinished = function(success, message) {
   }
 
   const statusContainer = document.getElementById('render-status-container');
-  const txt = document.getElementById('render-status-text');
-  const pctTxt = document.getElementById('render-status-pct');
-  const bar = document.getElementById('render-progress-bar');
-
-  if (txt) txt.innerText = "Ready for next video";
-  if (pctTxt) pctTxt.innerText = "0%";
-  if (bar) bar.style.width = "0%";
-
   setTimeout(() => {
     if (statusContainer) statusContainer.classList.add('hidden');
   }, 2000);
 };
 
+// ============================================================
+// GLOBAL HOTKEYS (SPACE = PLAY/PAUSE, ENTER = STAMP & NEXT)
+// ============================================================
+
 window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT' && e.target.getAttribute('contenteditable') !== 'true') {
+  const isEditingText = (
+    e.target.tagName === 'INPUT' || 
+    e.target.tagName === 'TEXTAREA' || 
+    e.target.getAttribute('contenteditable') === 'true'
+  );
+
+  // Spacebar to Play/Pause
+  if (e.code === 'Space' && !isEditingText) {
     e.preventDefault();
     if (currentTab === 'qa') {
-      toggleAudio();
+      toggleMasterPlay();
     }
+    return;
+  }
+
+  // Enter or Ctrl+Enter to Stamp End & Go Next
+  if (e.code === 'Enter') {
+    if (!isEditingText || e.ctrlKey) {
+      e.preventDefault();
+      if (currentTab === 'qa') {
+        stampAndGoNext();
+      }
+      return;
+    }
+  }
+
+  // Preview shortcut (P key)
+  if ((e.key === 'p' || e.key === 'P') && !isEditingText) {
+    e.preventDefault();
+    if (currentTab === 'qa') {
+      previewCurrentSegment();
+    }
+    return;
   }
 });

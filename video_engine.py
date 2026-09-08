@@ -15,10 +15,6 @@ import torch
 BASE_DIR = Path(__file__).resolve().parent
 CURRENT_OS = platform.system().lower()
 
-# ============================================================
-# AI VISION / CLIP SEMANTIC MATCHER (LIGHTWEIGHT & FAST)
-# ============================================================
-
 _CLIP_MODEL = None
 
 def get_clip_model():
@@ -131,10 +127,6 @@ def find_best_image_by_clip(caption_text, valid_paths, image_embeddings, fallbac
         return fallback_file
 
 
-# ============================================================
-# TEXT / CAPTION HELPERS
-# ============================================================
-
 def hex_to_rgba(hex_code, opacity_pct):
     hex_code = str(hex_code).lstrip("#")
     if len(hex_code) == 6:
@@ -190,10 +182,7 @@ def parse_styled_blocks(raw_text):
     blocks = []
     raw_lines = re.split(r"</?(?:div|p|br)[^>]*>", text_str)
 
-    span_regex = re.compile(
-        r"<span([^>]*)>(.*?)</span>",
-        re.IGNORECASE | re.DOTALL
-    )
+    span_regex = re.compile(r"<span([^>]*)>(.*?)</span>", re.IGNORECASE | re.DOTALL)
     attr_regex = re.compile(r'([a-zA-Z0-9_-]+)="([^"]*)"')
 
     for line in raw_lines:
@@ -218,7 +207,7 @@ def parse_styled_blocks(raw_text):
                     "box_bg": attrs.get("data-bg", "#8c4e12"),
                     "box_op": 90,
                     "box_bc": attrs.get("data-bc", "#ffffff"),
-                    "box_bw": 4,
+                    "box_bw": 3,
                     "stroke_w": 2,
                     "stroke_c": "#000000",
                 })
@@ -293,20 +282,14 @@ def break_lines_by_natural_delimiters(text, max_pixel_w, font):
     return [line for line in lines if line]
 
 
-# ============================================================
-# LINE CHUNKING & INTRO ISOLATION
-# ============================================================
-
 def build_clip_chunks(df, width, font_size, max_lines, get_audio_path_fn, isolate_first_row=False):
-    """
-    isolate_first_row == True (BGM ပါရှိလျှင်) -> Row 0 (ခေါင်းစဉ်) ကို သီးသန့် ခွဲထုတ်ထားမည်။
-    ကျန်ရှိသော အပိုင်းများကို max_lines စီ အတိအကျ စုစည်းပေးမည်။
-    """
     font = get_render_font(font_size)
-    max_pixel_w = int(width * 0.76)
+    max_pixel_w = int(width * 0.78)
     
     stream_units = []
     intro_chunk = None
+
+    has_timestamp = ("start_time" in df.columns and "end_time" in df.columns)
 
     for row_idx, (_, row) in enumerate(df.iterrows()):
         cap = str(row["caption"]).strip() if str(row["caption"]) != "nan" else ""
@@ -316,10 +299,19 @@ def build_clip_chunks(df, width, font_size, max_lines, get_audio_path_fn, isolat
         if not audio_path or not os.path.exists(audio_path):
             continue
 
-        try:
-            dur = max(float(mutagen.File(audio_path).info.length), 0.5)
-        except Exception:
-            dur = 3.0
+        if has_timestamp:
+            try:
+                st = float(row["start_time"])
+                et = float(row["end_time"])
+                dur = max(0.5, et - st)
+            except Exception:
+                st, et, dur = 0.0, 5.0, 5.0
+        else:
+            try:
+                dur = max(float(mutagen.File(audio_path).info.length), 0.5)
+                st, et = 0.0, dur
+            except Exception:
+                st, et, dur = 0.0, 3.0, 3.0
 
         blocks = parse_styled_blocks(cap)
         extracted_lines = []
@@ -332,13 +324,13 @@ def build_clip_chunks(df, width, font_size, max_lines, get_audio_path_fn, isolat
             continue
 
         total_chars = sum(len(txt) for txt, _ in extracted_lines) or 1
-        acc_start = 0.0
+        acc_start = st
         row_units = []
 
         for l_idx, (txt, b_meta) in enumerate(extracted_lines):
             l_dur = (len(txt) / total_chars) * dur
             start_sec = acc_start
-            end_sec = dur if l_idx == len(extracted_lines) - 1 else round(acc_start + l_dur, 3)
+            end_sec = et if l_idx == len(extracted_lines) - 1 else round(acc_start + l_dur, 3)
             acc_start = end_sec
 
             unit = {
@@ -352,7 +344,6 @@ def build_clip_chunks(df, width, font_size, max_lines, get_audio_path_fn, isolat
             }
             row_units.append(unit)
 
-        # ပထမဆုံး Row (ခေါင်းစဉ်) ကို သီးသန့် Intro အနေဖြင့် ထားခြင်း
         if isolate_first_row and intro_chunk is None:
             intro_chunk = row_units
         else:
@@ -362,16 +353,11 @@ def build_clip_chunks(df, width, font_size, max_lines, get_audio_path_fn, isolat
     if intro_chunk:
         chunks.append(intro_chunk)
 
-    # ကျန် stream များကို max_lines (ဥပမာ ၃ လိုင်း) အပြည့် ဖွဲ့စည်းခြင်း
     for i in range(0, len(stream_units), max_lines):
         chunks.append(stream_units[i:i + max_lines])
 
     return chunks
 
-
-# ============================================================
-# IMAGE LAYERS
-# ============================================================
 
 def create_static_dimmer_overlay(
     width,
@@ -391,12 +377,13 @@ def create_static_dimmer_overlay(
     if logo_path and os.path.exists(logo_path):
         try:
             logo_img = Image.open(logo_path).convert("RGBA")
-            logo_size = int(110 if is_mobile else 140)
+            logo_size = int(165 if is_mobile else 135)
             logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
 
-            margin = 60 if not is_mobile else 75
-            pos_x = width - logo_img.width - margin
-            pos_y = margin
+            margin_x = 60 if is_mobile else 50
+            margin_y = 65 if is_mobile else 45
+            pos_x = width - logo_img.width - margin_x
+            pos_y = margin_y
 
             overlay.paste(logo_img, (pos_x, pos_y), logo_img)
         except Exception:
@@ -423,7 +410,7 @@ def render_blocks_to_image(
         return
 
     font_normal = get_render_font(font_size)
-    font_box = get_render_font(int(font_size * 1.15))
+    font_box = get_render_font(int(font_size * 1.12))
 
     rendered_items = []
     total_content_h = 0
@@ -444,10 +431,14 @@ def render_blocks_to_image(
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
 
-        pad_x = 28 if is_box else 16
-        pad_y = 18 if is_box else 10
+        if is_mobile:
+            pad_x = 24 if is_box else 12
+            pad_y = 14 if is_box else 8
+        else:
+            pad_x = 16 if is_box else 8
+            pad_y = 8 if is_box else 4
 
-        bw = min(int(width * 0.90), tw + (pad_x * 2)) if is_box else tw
+        bw = min(int(width * 0.92), tw + (pad_x * 2)) if is_box else tw
         bh = th + (pad_y * 2) if is_box else th
 
         rendered_items.append({
@@ -467,9 +458,9 @@ def render_blocks_to_image(
     total_content_h -= line_spacing
 
     if pos_choice == "high":
-        start_y = 120 if not is_mobile else 220
+        start_y = 100 if not is_mobile else 220
     elif pos_choice == "low":
-        start_y = height - total_content_h - (120 if not is_mobile else 280)
+        start_y = height - total_content_h - (100 if not is_mobile else 260)
     else:
         start_y = (height - total_content_h) // 2
 
@@ -491,8 +482,8 @@ def render_blocks_to_image(
             draw.rectangle(
                 [bx, by, bx + item["box_w"], by + item["box_h"]],
                 fill=box_fill_rgba,
-                outline=box_border_rgba if b.get("box_bw", 4) > 0 else None,
-                width=b.get("box_bw", 4),
+                outline=box_border_rgba if b.get("box_bw", 3) > 0 else None,
+                width=b.get("box_bw", 3),
             )
 
             tx = (width - item["text_w"]) // 2
@@ -569,10 +560,6 @@ def prepare_final_image_layer(
         fallback.save(output_path, "JPEG")
 
 
-# ============================================================
-# CROSS-PLATFORM ENCODER DETECTION
-# ============================================================
-
 def ffmpeg_has_encoder(encoder_name):
     try:
         test_cmd = [
@@ -632,10 +619,6 @@ def encoder_args(encoder):
 
     return ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p"]
 
-
-# ============================================================
-# RENDERING
-# ============================================================
 
 def render_single_task(task):
     cmd, clip_mp4 = task
@@ -714,9 +697,6 @@ def render_all_clips(
             logo_path=logo_path, overlay_mode=overlay_mode, rgba_color=rgba_color
         )
 
-        # ----------------------------------------------------
-        # BGM ပါရှိပါက ပထမဆုံး Row (ခေါင်းစဉ်) ကို သီးသန့် Intro အနေဖြင့် ထားခြင်း
-        # ----------------------------------------------------
         has_intro_bgm = (enable_bgm_cfg and bgm_path and os.path.exists(bgm_path))
         progress_cb("Organizing title & line streams...", 10)
         
@@ -765,7 +745,6 @@ def render_all_clips(
                     background_cache[cache_key] = cached_path
                 base_bg_jpg = background_cache[cache_key]
 
-            # စာသား Overlay ဆွဲခြင်း
             text_png = temp_dir / f"chunk_{clip_idx:04d}_text.png"
             chunk_blocks = [{
                 **chunk[0]["block_meta"],
@@ -776,9 +755,6 @@ def render_all_clips(
                 chunk_blocks, width, height, font_size, line_spacing, pos_choice, is_mobile, str(text_png)
             )
 
-            # ----------------------------------------------------
-            # Audio Slices ချိတ်ဆက်ခြင်း
-            # ----------------------------------------------------
             inputs = []
             if not is_video_input:
                 inputs += ["-loop", "1", "-framerate", str(fps), "-i", str(base_bg_jpg)]
@@ -795,16 +771,12 @@ def render_all_clips(
                 audio_in_indices.append((curr_in, u["start_sec"], u["end_sec"]))
                 curr_in += 1
 
-            # BGM ကို Intro Clip (clip_idx == 0) တွင်သာ သီးသန့် ထည့်သွင်းခြင်း
             include_bgm = (clip_idx == 0 and has_intro_bgm)
             bgm_idx = None
             if include_bgm:
                 inputs += ["-stream_loop", "-1", "-i", str(bgm_path)]
                 bgm_idx = curr_in
 
-            # ----------------------------------------------------
-            # Video & Audio Filter Graph
-            # ----------------------------------------------------
             filter_parts = []
             if is_video_input:
                 filter_parts.append(
@@ -815,11 +787,13 @@ def render_all_clips(
                 last_v = "[0:v]"
 
             filter_parts.append(f"{last_v}[1:v]overlay=0:0[bg_dim]")
-            fade_dur = min(0.35, clip_dur / 2)
+            
+            # Caption Fade-In Animation
+            fade_dur = min(0.25, max(0.1, clip_dur / 3))
             filter_parts.append(f"[2:v]format=yuva420p,fade=t=in:st=0:d={fade_dur}:alpha=1[text_anim]")
             filter_parts.append(f"[bg_dim][text_anim]overlay=0:0[v]")
 
-            # Audio segments များ trim လုပ်၍ ချိတ်ဆက်ခြင်း
+            # Audio slices trim and concat
             audio_concat_tags = []
             for seg_i, (in_idx, st, et) in enumerate(audio_in_indices):
                 tag = f"[a_slice_{seg_i}]"
