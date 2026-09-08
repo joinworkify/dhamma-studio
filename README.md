@@ -102,9 +102,42 @@ Plaintext
 ├── main.py                 # Application entry point & Backend API
 ├── video_engine.py         # FFmpeg video rendering & Pillow text drawing
 ├── requirements.txt        # Python package dependencies
+├── pyproject.toml          # uv project config (pinned to Python 3.12)
+├── dhamma_studio.spec      # PyInstaller build spec
+├── scripts/                # Build & packaging scripts (see below)
 ├── .gitignore              # Git ignore rules
 └── README.md
 ```
+
+---
+## 📦 Building a Standalone App (macOS / Windows)
+
+These scripts package the app (via [uv](https://docs.astral.sh/uv/) + PyInstaller) into a double-clickable
+`.app` (macOS) or folder with `.exe` (Windows) — no Python install required to run it.
+
+**macOS:**
+```bash
+./scripts/build_mac.sh
+```
+Output: `dist/Dhamma Studio.app`
+
+**Windows** (run on Windows — PyInstaller does not cross-compile):
+```powershell
+.\scripts\build_windows.ps1
+```
+Output: `dist\DhammaStudio\DhammaStudio.exe`
+
+Both scripts also fetch and bundle a static **ffmpeg** binary automatically
+(`scripts/fetch_ffmpeg_mac.sh` / `scripts/fetch_ffmpeg_windows.ps1`) so the packaged
+app works without ffmpeg installed on the target machine. The bundled ffmpeg build
+includes libx264 and is licensed **GPL** — keep that in mind if you redistribute
+the built app. Downloaded binaries live in `vendor/ffmpeg/` (gitignored, not committed).
+
+Note: the first run of AI Semantic Image Matching downloads the CLIP model
+(`clip-ViT-B-32`, ~350MB) from Hugging Face on demand — the packaged app still needs
+internet access the first time that feature is used.
+
+---
 💻 Usage Guide
 1. Launch the Application
 ```
