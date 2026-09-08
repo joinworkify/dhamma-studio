@@ -15,6 +15,18 @@ import torch
 BASE_DIR = Path(__file__).resolve().parent
 CURRENT_OS = platform.system().lower()
 
+
+def _resolve_ffmpeg():
+    exe_name = "ffmpeg.exe" if CURRENT_OS == "windows" else "ffmpeg"
+    bundled = BASE_DIR / "ffmpeg-bin" / exe_name
+    if bundled.exists():
+        return str(bundled)
+    found = shutil.which("ffmpeg")
+    return found if found else "ffmpeg"
+
+
+FFMPEG_BIN = _resolve_ffmpeg()
+
 _CLIP_MODEL = None
 
 def get_clip_model():
@@ -563,7 +575,7 @@ def prepare_final_image_layer(
 def ffmpeg_has_encoder(encoder_name):
     try:
         test_cmd = [
-            "ffmpeg", "-hide_banner", "-loglevel", "error",
+            FFMPEG_BIN, "-hide_banner", "-loglevel", "error",
             "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.05",
             "-c:v", encoder_name, "-f", "null", "-"
         ]
@@ -823,7 +835,7 @@ def render_all_clips(
             clip_mp4 = temp_dir / f"clip_{clip_idx:04d}.mp4"
 
             cmd = [
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error"
+                FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error"
             ] + inputs + [
                 "-filter_complex", filter_str,
                 "-map", "[v]",
@@ -877,7 +889,7 @@ def render_all_clips(
                 f.write(f"file '{safe_path}'\n")
 
         merge_cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
             "-f", "concat", "-safe", "0",
             "-i", str(concat_txt),
             "-c", "copy",
