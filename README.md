@@ -59,7 +59,21 @@ Bash
 git clone [https://github.com/joinworkify/dhamma-studio.git](https://github.com/joinworkify/dhamma-studio.git)
 cd dhamma-studio
 ```
-2. Set Up Virtual Environment
+2. Set Up Environment & Install Dependencies
+
+**Option A — uv (recommended):**
+Project is pinned to Python 3.12 via `.python-version` / `pyproject.toml`. [Install uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't have it, then:
+```
+Bash
+uv sync
+```
+This creates `.venv` with Python 3.12 and installs all locked dependencies. Run the app with:
+```
+Bash
+uv run python main.py
+```
+
+**Option B — pip + venv:**
 Linux / macOS:
 ```
 Bash
@@ -72,7 +86,7 @@ PowerShell
 python -m venv .venv
 .venv\Scripts\activate
 ```
-3. Install Python Dependencies
+Install Python Dependencies:
 ```
 Bash
 pip install -r requirements.txt
