@@ -1,449 +1,636 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="my">
 <head>
   <meta charset="UTF-8">
-  <title>Dhamma Studio - Video Automation</title>
+  <title>Dhamma Studio - Interactive Live Canvas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @font-face {
       font-family: 'NamKhone';
-      src: url('../fonts/NamKhone Grand (2).ttf'), url('../fonts/NamKhone Grand.ttf'), url('../NamKhone Grand.ttf');
+      src: url('/static/fonts/NamKhone Grand (2).ttf'), url('/static/fonts/NamKhone Grand.ttf'), url('/fonts/NamKhone Grand.ttf');
     }
-    .font-mm {
-      font-family: 'NamKhone', 'Noto Sans Myanmar', 'Pyidaungsu', sans-serif;
+    .font-mm { font-family: 'NamKhone', sans-serif; }
+    .text-stroke {
+      text-shadow:
+        -2.5px -2.5px 0 #000,
+         2.5px -2.5px 0 #000,
+        -2.5px  2.5px 0 #000,
+         2.5px  2.5px 0 #000,
+        -3.5px 0 0 #000,
+         3.5px 0 0 #000,
+         0 -3.5px 0 #000,
+         0  3.5px 0 #000;
     }
-
-    html {
-      color-scheme: dark;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background-color: #0b0f19;
-      color: #e2e8f0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      user-select: none;
-    }
-
-    header {
-      background-color: #111827;
-      border-bottom: 1px solid #1f2937;
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-shrink: 0;
-    }
-
-    .card {
-      background-color: #111827;
-      border: 1px solid #1f2937;
-      border-radius: 16px;
-      padding: 18px;
-    }
-
-    .input-field, select {
-      background-color: #090d16 !important;
-      border: 1px solid #1f2937 !important;
-      color: #f3f4f6 !important;
-      padding: 10px 14px;
-      border-radius: 10px;
-      outline: none;
-      width: 100%;
-      font-size: 13px;
-    }
-
-    select, option {
-      background-color: #090d16 !important;
-      color: #f3f4f6 !important;
-    }
-
-    option:checked, option:hover {
-      background-color: #1f2937 !important;
-    }
-
-    .input-field:focus, select:focus {
-      border-color: #6366f1 !important;
-    }
-
-    .btn {
-      padding: 8px 16px;
-      border-radius: 10px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-      transition: opacity 0.2s;
-    }
-    .btn:hover {
-      opacity: 0.9;
-    }
-
-    .btn-primary {
-      background-color: #4f46e5;
-      color: #ffffff;
-    }
-
-    .btn-secondary {
-      background-color: #1f2937;
-      color: #e2e8f0;
-      border: 1px solid #374151;
-    }
-
-    .btn-success {
-      background-color: #059669;
-      color: #ffffff;
-    }
-
-    .btn-warning {
-      background-color: #d97706;
-      color: #ffffff;
-    }
-
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-
-    .grid-3 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 16px;
-    }
-
-    .grid-4 {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr;
-      gap: 16px;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #090d16;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #1f2937;
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #374151;
-    }
+    .viewport-landscape { width: 100%; aspect-ratio: 16/9; }
+    .viewport-mobile { height: 100%; max-height: 480px; aspect-ratio: 9/16; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   </style>
 </head>
-<body>
+<body class="bg-[#090d16] text-slate-100 flex flex-col h-screen overflow-hidden select-none">
 
-  <!-- Top Header -->
-  <header>
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <div style="background-color: #4f46e5; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">
-        ☸
-      </div>
+  <!-- Header -->
+  <header class="h-14 border-b border-slate-800 bg-[#111827] px-6 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">☸</div>
       <div>
-        <h1 style="font-size: 15px; font-weight: bold; color: white;">Dhamma Studio</h1>
-        <p style="font-size: 11px; color: #9ca3af;">Interactive Audio Sync & Video Engine</p>
+        <h1 class="text-sm font-bold text-white tracking-wide">Dhamma Studio</h1>
+        <p class="text-[10px] text-slate-400">4-Line Punctuation Splitting • Live Background Sync</p>
       </div>
     </div>
-    
-    <div style="background-color: #090d16; border: 1px solid #1f2937; padding: 4px; border-radius: 12px; display: flex; gap: 4px;">
-      <button id="nav-qa" onclick="switchTab('qa')" class="btn btn-primary">
-        1. Unified Editor & Audio Sync
-      </button>
-      <button id="nav-gen" onclick="switchTab('gen')" class="btn btn-secondary">
-        2. Video Generator
-      </button>
+
+    <!-- Format Switcher & Progress Bar -->
+    <div class="flex items-center gap-4">
+      <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+        <button id="btn-fmt-landscape" onclick="switchVideoFormat('landscape')" class="px-3 py-1 rounded bg-indigo-600 font-semibold text-white">16:9 Landscape</button>
+        <button id="btn-fmt-mobile" onclick="switchVideoFormat('mobile')" class="px-3 py-1 rounded text-slate-400 hover:text-white">9:16 Mobile Shorts</button>
+      </div>
+
+      <div class="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-full w-80">
+        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div id="progress-bar" class="bg-indigo-500 h-full transition-all duration-300 w-0"></div>
+        </div>
+        <span id="progress-text" class="text-xs font-mono text-indigo-400 shrink-0">Ready</span>
+      </div>
     </div>
   </header>
 
-  <!-- Main Workspace -->
-  <main style="flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+  <!-- Workspace -->
+  <main class="flex-1 flex overflow-hidden p-4 gap-4">
 
-    <!-- TAB 1: Unified QA & Visual Styler -->
-    <div id="tab-qa" style="max-width: 1040px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 18px;">
+    <!-- LEFT: Viewport & Visual Toolbar -->
+    <section class="flex-[1.15] flex flex-col gap-3">
       
-      <!-- Top Action Bar -->
-      <div class="card" style="border: 1px solid #374151; background: linear-gradient(135deg, #0d1322 0%, #111827 100%);">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div>
-            <span style="font-size: 13px; font-weight: bold; color: #818cf8; display: flex; align-items: center; gap: 6px;">
-              🎙️ Unified Audio & Caption Sync Studio
-            </span>
-            <p style="font-size: 11px; color: #9ca3af; margin-top: 4px;">
-              Cleaned CSV ရှိပြီးသားဆိုလျှင် <b>Open Cleaned CSV</b> ကိုသာ ရွေးပါ (Text မလိုပါ)။ CSV မရှိသေးပါက <b>New: Text + MP3</b> ဖြင့် စတင်ပါ။
-            </p>
+      <!-- Video Viewport -->
+      <div class="flex-1 bg-black rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-2xl p-2">
+        <div id="video-viewport" class="viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950">
+          
+          <!-- Blurred Background for Mobile View -->
+          <img id="canvas-bg-blur" class="absolute inset-0 w-full h-full object-cover filter blur-md brightness-50 z-0 hidden" alt="Blurred BG">
+          
+          <!-- Center Banner Frame (Only for Mobile 9:16) -->
+          <div id="mobile-center-banner" class="absolute inset-x-0 h-48 border-y border-white/20 overflow-hidden z-10 hidden flex items-center justify-center">
+            <img id="canvas-bg-center" class="w-full h-full object-cover" alt="Sharp Banner">
+            <div class="absolute inset-0 bg-black/25"></div>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button onclick="loadTextAndMp3()" class="btn btn-primary" id="btn-load-unified" style="padding: 10px 16px; font-size: 12px;">
-              ⚡ New: Text + MP3
-            </button>
-            <button onclick="browseCSV()" class="btn btn-secondary" style="padding: 10px 16px; font-size: 12px; background-color: #1e293b; border-color: #475569;">
-              📂 Open Cleaned CSV
-            </button>
+
+          <!-- Standard Landscape Background -->
+          <img id="canvas-bg" class="absolute inset-0 w-full h-full object-cover z-0 hidden" alt="Background">
+          <div id="canvas-dimmer" class="absolute inset-0 bg-[#00000073] z-10 transition-colors pointer-events-none"></div>
+          <img id="logo-preview" class="absolute top-4 right-5 w-10 h-10 object-contain z-30 hidden" alt="Logo">
+          
+          <!-- Live Caption (1:1 with Render Output) -->
+          <div id="canvas-text" 
+               contenteditable="true" 
+               oninput="syncCanvasToMemory()" 
+               class="font-mm text-stroke z-30 text-center text-white leading-relaxed font-semibold tracking-wide drop-shadow-lg outline-none cursor-text select-text whitespace-pre-line px-6">
+            (တင်သွင်းထားသော တရားတော်စာသား ဤနေရာတွင် ပေါ်ပါမည်)
           </div>
         </div>
       </div>
 
-      <!-- Unified Editor Card -->
-      <div id="qa-editor-card" class="card hidden" style="display: flex; flex-direction: column; gap: 16px;">
-        
-        <!-- Row Header & Navigation -->
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 12px;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span id="qa-row-indicator" style="font-weight: bold; font-size: 15px; color: white;">Row 1 of 0</span>
-            <span id="qa-sync-badge" style="font-size: 11px; padding: 4px 10px; border-radius: 999px; font-weight: bold;"></span>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button onclick="prevQARow()" class="btn btn-secondary">◀ Prev</button>
-            <button onclick="nextQARow()" class="btn btn-secondary">Next ▶</button>
-            <button onclick="jumpNextIssue()" class="btn" style="background-color: rgba(217, 119, 6, 0.15); border: 1px solid rgba(217, 119, 6, 0.4); color: #f59e0b;">Next Issue ⚠️</button>
-          </div>
+      <!-- In-Canvas Word Styler Toolbar -->
+      <div class="bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-3">
+          <span class="text-[11px] font-bold text-indigo-400 uppercase">Word Styler:</span>
+          <button onclick="applyBoxStyle()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-md font-semibold">Highlight Box</button>
+          <input type="color" id="tool-box-bg" value="#8c4e12" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+          <input type="color" id="tool-box-bc" value="#ffffff" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+
+          <div class="h-4 w-px bg-slate-800"></div>
+
+          <button onclick="applyOutlineStyle()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-semibold">Outline</button>
+          <input type="color" id="tool-outline-c" value="#000000" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+
+          <button onclick="clearSelectedStyle()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-md">✕ Clear</button>
         </div>
 
-        <!-- Integrated Live Audio Player Bar -->
-        <div style="background: #090d16; border: 1px solid #1e293b; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <button id="btn-master-play" onclick="toggleMasterPlay()" class="btn btn-success" style="padding: 8px 18px; display: flex; align-items: center; gap: 6px;">
-              <span id="btn-master-icon">▶</span>
-              <span id="btn-master-text">Play Audio</span>
-              <kbd style="background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 4px; font-size: 10px; font-family: monospace;">Space</kbd>
-            </button>
-            <button onclick="seekAudioRelative(-3.0)" class="btn btn-secondary" title="နောက်သို့ ၃ စက္ကန့် ဆုတ်နားထောင်ရန်">
-              ⏪ -3s
-            </button>
-            <button onclick="seekAudioRelative(3.0)" class="btn btn-secondary" title="ရှေ့သို့ ၃ စက္ကန့် ကျော်ရန်">
-              +3s ⏩
-            </button>
-            <span id="live-audio-clock" style="font-size: 14px; font-weight: bold; color: #34d399; font-family: monospace; background: #022c22; padding: 4px 10px; border-radius: 6px; border: 1px solid #065f46; margin-left: 6px;">0.00s</span>
-          </div>
+        <div class="flex items-center gap-3">
+          <label class="text-slate-400 text-[11px]">Font Size:</label>
+          <input type="number" id="gen-font-size" value="48" min="20" max="72" onchange="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center text-xs">
+          
+          <label class="text-slate-400 text-[11px]">Spacing:</label>
+          <input type="number" id="gen-line-spacing" value="26" min="10" max="60" onchange="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center text-xs">
+          
+          <label class="text-slate-400 text-[11px]">Dimmer:</label>
+          <input type="range" id="gen-opacity" min="0" max="90" value="45" oninput="adjustDimmer(this.value)" class="w-16">
+        </div>
+      </div>
 
-          <!-- Stamp Current Timestamp Button -->
-          <button onclick="stampAndGoNext()" class="btn btn-warning" style="padding: 8px 20px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px;">
-            <span>↵ Stamp End & Next Line</span>
-            <kbd style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 10px; font-family: monospace;">Enter</kbd>
+      <!-- Audio Controller -->
+      <div class="bg-slate-900/80 border border-slate-800 p-3 rounded-xl flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <button id="btn-play" onclick="togglePlay()" class="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition">
+            ▶ Play (Space)
+          </button>
+          <span id="clock" class="font-mono text-sm text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-md">
+            00:00.00
+          </span>
+        </div>
+        <audio id="audio-elem" class="hidden"></audio>
+        <button onclick="stampNext()" class="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition">
+          ↵ Split & Stamp Next (Enter)
+        </button>
+      </div>
+
+    </section>
+
+    <!-- RIGHT: Timeline Chunks, Inline Editors & Delete Action -->
+    <section class="flex-1 flex flex-col gap-3 overflow-hidden">
+      
+      <!-- Upload Card -->
+      <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex flex-col gap-2.5 shrink-0">
+        <div class="grid grid-cols-3 gap-2">
+          <input type="file" id="input-audio" accept="audio/*" class="hidden" onchange="onFileChosen('audio')">
+          <button onclick="document.getElementById('input-audio').click()" id="btn-audio-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            🎵 1. Audio (.mp3)
+          </button>
+
+          <input type="file" id="input-text" accept=".txt" class="hidden" onchange="onFileChosen('text')">
+          <button onclick="document.getElementById('input-text').click()" id="btn-text-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            📝 2. Text (.txt)
+          </button>
+
+          <input type="file" id="input-logo" accept="image/*" class="hidden" onchange="onFileChosen('logo')">
+          <button onclick="document.getElementById('input-logo').click()" id="btn-logo-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            🏷️ 3. Logo (Opt)
           </button>
         </div>
 
-        <!-- Start & End Seconds Input Grid with Audio Selector -->
-        <div class="grid-3">
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <label style="font-size: 11px; color: #9ca3af;">Audio Source (MP3)</label>
-              <button onclick="browseSingleAudioFile()" class="btn btn-secondary" style="padding: 2px 8px; font-size: 10px; border-color: #6366f1; color: #818cf8;">
-                🎵 Select MP3
-              </button>
-            </div>
-            <input type="text" id="qa-mp3-input" class="input-field" style="font-family: monospace;" readonly>
-          </div>
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 4px;">Start Time (sec)</label>
-            <input type="number" step="0.1" id="qa-start-time" class="input-field" style="font-family: monospace;">
-          </div>
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 4px;">End Time (sec)</label>
-            <input type="number" step="0.1" id="qa-end-time" class="input-field" style="font-family: monospace;">
-          </div>
-        </div>
-
-        <!-- Visual Text Formatting Toolbar -->
-        <div style="background-color: #090d16; border: 1px solid #1f2937; padding: 12px 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 8px;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <span style="font-size: 11px; font-weight: bold; color: #818cf8; text-transform: uppercase;">Visual Styling Toolbar</span>
-            <span style="font-size: 11px; color: #9ca3af;">Select words in editor to apply highlight box or outline</span>
-          </div>
-
-          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
-            <div style="background-color: #111827; border: 1px solid #1f2937; padding: 4px 8px; border-radius: 8px; display: flex; align-items: center; gap: 6px;">
-              <button onclick="applyBoxToSelection()" class="btn btn-warning">Apply Highlight Box</button>
-              <label style="font-size: 11px; color: #9ca3af;">Fill:</label>
-              <input type="color" id="tool-box-bg" value="#8c4e12" style="width: 24px; height: 24px; background: transparent; border: none; cursor: pointer;">
-              <label style="font-size: 11px; color: #9ca3af;">Border:</label>
-              <input type="color" id="tool-box-bc" value="#ffffff" style="width: 24px; height: 24px; background: transparent; border: none; cursor: pointer;">
-            </div>
-
-            <div style="background-color: #111827; border: 1px solid #1f2937; padding: 4px 8px; border-radius: 8px; display: flex; align-items: center; gap: 6px;">
-              <button onclick="applyOutlineToSelection()" class="btn btn-primary">Apply Outline</button>
-              <select id="tool-outline-w" style="width: auto; padding: 4px 8px; font-size: 12px;">
-                <option value="2">2px</option>
-                <option value="3" selected>3px</option>
-                <option value="5">5px</option>
-              </select>
-              <input type="color" id="tool-outline-c" value="#000000" style="width: 24px; height: 24px; background: transparent; border: none; cursor: pointer;">
-            </div>
-
-            <button onclick="removeStyleFromSelection()" class="btn btn-secondary">✕ Clear Style</button>
-          </div>
-        </div>
-
-        <!-- Live Visual Caption Editor -->
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label style="font-size: 11px; color: #9ca3af;">Live Caption Editor (Direct Typo Editing)</label>
-            <span style="font-size: 11px; color: #818cf8;">Direct Myanmar Unicode Editing</span>
-          </div>
-          <div id="qa-caption-editor" contenteditable="true" oninput="syncCurrentInputsToMemory()" 
-            class="font-mm" 
-            style="min-height: 120px; max-height: 220px; overflow-y: auto; background-color: #090d16; border: 1px solid #1f2937; border-radius: 12px; padding: 14px; color: #ffffff; font-size: 18px; line-height: 1.8; outline: none;">
-          </div>
-        </div>
-
-        <!-- Next Line Preview -->
-        <div style="background: rgba(15, 23, 42, 0.4); border: 1px dashed #334155; border-radius: 8px; padding: 8px 14px;">
-          <span style="font-size: 10px; color: #64748b; text-transform: uppercase;">Next Line Preview:</span>
-          <div id="qa-next-line-preview" class="font-mm" style="font-size: 13px; color: #94a3b8; margin-top: 2px;">
-            -
-          </div>
-        </div>
-
-        <!-- Footer Actions -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1f2937; padding-top: 12px;">
-          <div style="display: flex; gap: 8px;">
-            <button onclick="previewCurrentSegment()" class="btn btn-secondary" style="display: flex; align-items: center; gap: 4px;">
-              <span>🔊 Preview Segment</span>
-              <kbd style="background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; font-size: 10px; font-family: monospace;">P</kbd>
-            </button>
-            <button onclick="saveQARow()" class="btn btn-primary">💾 Save Row</button>
-          </div>
-          <button onclick="exportCleanedCSV()" class="btn btn-secondary">Export Cleaned CSV</button>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- TAB 2: Video Generator -->
-    <div id="tab-gen" class="hidden" style="max-width: 1040px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
-      
-      <!-- Paths -->
-      <div class="grid-3">
-        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="overflow: hidden; margin-right: 8px;">
-            <span style="font-size: 11px; color: #9ca3af; display: block;">Media Folder</span>
-            <span id="label-images-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">No folder selected</span>
-          </div>
-          <button onclick="browseImages()" class="btn btn-primary" style="flex-shrink: 0;">Browse</button>
-        </div>
-
-        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="overflow: hidden; margin-right: 8px;">
-            <span style="font-size: 11px; color: #9ca3af; display: block;">Corner Logo</span>
-            <span id="label-logo-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Optional (None)</span>
-          </div>
-          <button onclick="browseLogo()" class="btn btn-secondary" style="flex-shrink: 0;">Select</button>
-        </div>
-
-        <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="overflow: hidden; margin-right: 8px;">
-            <span style="font-size: 11px; color: #9ca3af; display: block;">Output Path</span>
-            <span id="label-output-path" style="font-size: 12px; color: #f3f4f6; font-family: monospace; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">final_output.mp4</span>
-          </div>
-          <button onclick="browseOutput()" class="btn btn-secondary" style="flex-shrink: 0;">Change</button>
-        </div>
-      </div>
-
-      <!-- Render Settings Panel -->
-      <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
-        <h2 style="font-size: 12px; font-weight: bold; color: #9ca3af; text-transform: uppercase;">Video Layout, Typography & Overlay</h2>
-
-        <div class="grid-3">
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Format</label>
-            <select id="gen-format" onchange="adjustDefaultFontSettings()">
-              <option value="landscape" selected>Landscape (16:9 - 1920x1080)</option>
-              <option value="mobile">Mobile / Shorts (9:16 - 1080x1920)</option>
-            </select>
-          </div>
-
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Font Size (px)</label>
-            <input type="number" id="gen-font-size" value="44" min="20" max="80" class="input-field">
-          </div>
-
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Line Spacing (px)</label>
-            <input type="number" id="gen-line-spacing" value="22" min="10" max="50" class="input-field">
-          </div>
-        </div>
-
-        <div class="grid-4">
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Vertical Position</label>
-            <select id="gen-position">
-              <option value="high">Top (High)</option>
-              <option value="middle" selected>Center (Middle)</option>
-              <option value="low">Bottom (Low)</option>
-            </select>
-          </div>
-
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Lines Per Page</label>
-            <select id="gen-max-lines">
-              <option value="1">1 Line</option>
-              <option value="2">2 Lines</option>
-              <option value="3" selected>3 Lines</option>
-              <option value="4">4 Lines</option>
-            </select>
-          </div>
-
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Background Overlay</label>
-            <select id="gen-overlay-mode">
-              <option value="Full Video Overlay" selected>Full Video Overlay</option>
-              <option value="None">None (Pure Background)</option>
-            </select>
-          </div>
-
-          <div>
-            <label style="display: block; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">Overlay Color & Opacity (<span id="gen-opacity-val">50</span>%)</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input type="color" id="gen-color" value="#000000" style="width: 38px; height: 38px; background: transparent; border: none; cursor: pointer; flex-shrink: 0;">
-              <input type="range" id="gen-opacity" min="0" max="100" value="50" style="flex: 1;" oninput="document.getElementById('gen-opacity-val').innerText = this.value">
-            </div>
-          </div>
-        </div>
-
-        <!-- BGM Toggle -->
-        <div style="background-color: #090d16; border: 1px solid #1f2937; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 10px;">
-          <input type="checkbox" id="gen-enable-bgm" checked style="width: 16px; height: 16px; cursor: pointer; accent-color: #4f46e5;">
-          <label for="gen-enable-bgm" style="font-size: 12px; color: #e2e8f0; font-weight: 500; cursor: pointer; user-select: none;">
-            🎵 Enable Background Music (BGM) on Intro Clip
-          </label>
-        </div>
-
-        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1f2937; padding-top: 16px;">
-          <div id="render-status-container" class="hidden" style="flex: 1; margin-right: 20px;">
-            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; margin-bottom: 6px;">
-              <span id="render-status-text">Rendering...</span>
-              <span id="render-status-pct">0%</span>
-            </div>
-            <div style="background-color: #090d16; border: 1px solid #1f2937; height: 8px; border-radius: 999px; overflow: hidden;">
-              <div id="render-progress-bar" style="background-color: #4f46e5; height: 100%; width: 0%; transition: width 0.3s;"></div>
-            </div>
-          </div>
-
-          <button id="btn-start-render" onclick="startRender()" class="btn btn-primary" style="padding: 12px 24px; font-size: 13px;">
-            🎬 Start Video Rendering
+        <div class="flex gap-2">
+          <input type="file" id="input-folder" webkitdirectory directory multiple class="hidden" onchange="uploadImageFolder()">
+          <button onclick="document.getElementById('input-folder').click()" id="btn-folder-choose" class="flex-1 bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg text-slate-200 border border-slate-700 truncate">
+            📁 Upload Images Folder
           </button>
+          <button onclick="uploadAndSync()" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-4 py-2 rounded-lg text-white font-semibold">⚡ Auto-Segment</button>
         </div>
-
       </div>
-    </div>
+
+      <!-- Segment Timeline List -->
+      <div class="flex-1 bg-slate-900/40 border border-slate-800 rounded-xl flex flex-col overflow-hidden p-3">
+        <div class="flex justify-between items-center mb-2 px-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Segments</span>
+            <span id="segment-count" class="text-xs text-indigo-400 font-mono">0 Chunks</span>
+          </div>
+
+          <!-- Shift Shifter -->
+          <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+            <span class="text-[10px] text-slate-400">Shift All:</span>
+            <button onclick="shiftAllTimestamps(-1.0)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-amber-400">-1s</button>
+            <button onclick="shiftAllTimestamps(-0.5)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-amber-400">-0.5s</button>
+            <button onclick="shiftAllTimestamps(0.5)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-emerald-400">+0.5s</button>
+            <button onclick="shiftAllTimestamps(1.0)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-emerald-400">+1s</button>
+            <button onclick="shiftAllTimestamps(4.0)" class="bg-indigo-600 hover:bg-indigo-500 text-[10px] px-2 py-0.5 rounded text-white font-bold" title="Chunk 1 မှစ၍ ၄ စက္ကန့် နောက်ဆုတ်မည်">+4s Delay</button>
+          </div>
+        </div>
+        <div id="segment-list" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+      </div>
+
+      <!-- Render Action Button with BGM Checkbox -->
+      <div class="flex items-center gap-3 shrink-0">
+        <label class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-slate-800/80 transition text-xs shrink-0 select-none">
+          <input type="checkbox" id="check-enable-bgm" checked class="w-4 h-4 rounded accent-indigo-600 cursor-pointer">
+          <span class="text-slate-200 font-medium">🎵 Intro BGM</span>
+        </label>
+
+        <button onclick="startRender()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30">
+          🎬 Render Complete Video (FFmpeg)
+        </button>
+        <button id="btn-download" onclick="downloadVideo()" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-xl font-bold text-xs text-white hidden">
+          ⬇ Download Video
+        </button>
+      </div>
+
+    </section>
 
   </main>
 
-  <script src="app.js"></script>
+  <script>
+    let rows = [];
+    let currentIndex = 0;
+    let currentFormat = "landscape";
+    const audioElem = document.getElementById('audio-elem');
+
+    setInterval(async () => {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        document.getElementById('progress-bar').style.width = `${data.pct}%`;
+        document.getElementById('progress-text').innerText = `${data.pct}% - ${data.msg}`;
+        if (data.pct === 100 && !data.is_rendering && rows.length > 0) {
+          const dlBtn = document.getElementById('btn-download');
+          if (dlBtn && dlBtn.classList.contains('hidden')) {
+            dlBtn.classList.remove('hidden');
+          }
+        }
+      } catch (err) {}
+    }, 1000);
+
+    function switchVideoFormat(fmt) {
+      currentFormat = fmt;
+      const viewport = document.getElementById('video-viewport');
+      const btnLand = document.getElementById('btn-fmt-landscape');
+      const btnMob = document.getElementById('btn-fmt-mobile');
+      const fontIn = document.getElementById('gen-font-size');
+      const spaceIn = document.getElementById('gen-line-spacing');
+      const bgBlur = document.getElementById('canvas-bg-blur');
+      const centerBanner = document.getElementById('mobile-center-banner');
+      const standardBg = document.getElementById('canvas-bg');
+
+      if (fmt === 'mobile') {
+        viewport.className = "viewport-mobile relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950";
+        btnMob.className = "px-3 py-1 rounded bg-indigo-600 font-semibold text-white";
+        btnLand.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
+        fontIn.value = 40;
+        spaceIn.value = 22;
+
+        standardBg.classList.add('hidden');
+        bgBlur.classList.remove('hidden');
+        centerBanner.classList.remove('hidden');
+      } else {
+        viewport.className = "viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950";
+        btnLand.className = "px-3 py-1 rounded bg-indigo-600 font-semibold text-white";
+        btnMob.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
+        fontIn.value = 48;
+        spaceIn.value = 26;
+
+        bgBlur.classList.add('hidden');
+        centerBanner.classList.add('hidden');
+        standardBg.classList.remove('hidden');
+      }
+      adjustFontSettings();
+      if (rows.length > 0) selectSegment(currentIndex);
+    }
+
+    function onFileChosen(type) {
+      const input = document.getElementById(`input-${type}`);
+      const btn = document.getElementById(`btn-${type}-choose`);
+      if (input.files[0]) {
+        btn.innerText = `✓ ${input.files[0].name}`;
+        btn.classList.add('border-emerald-600', 'text-emerald-400');
+      }
+    }
+
+    async function uploadImageFolder() {
+      const folderInput = document.getElementById('input-folder');
+      const files = folderInput.files;
+      if (!files || files.length === 0) return;
+
+      const btn = document.getElementById('btn-folder-choose');
+      btn.innerText = `⏳ Uploading ${files.length} images...`;
+
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
+
+      const res = await fetch('/api/upload_images_folder', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        btn.innerText = `✓ ${data.count} Images Uploaded`;
+        btn.classList.add('border-emerald-600', 'text-emerald-400');
+      }
+    }
+
+    async function uploadAndSync() {
+      const audioInput = document.getElementById('input-audio');
+      const textInput = document.getElementById('input-text');
+      const logoInput = document.getElementById('input-logo');
+
+      if (!audioInput.files || !audioInput.files[0] || !textInput.files || !textInput.files[0]) {
+        alert("Audio (.mp3) နှင့် Text (.txt) ဖိုင် နှစ်ခုလုံးကို အရင်ရွေးချယ်ပေးပါ။");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('audio', audioInput.files[0]);
+      formData.append('text', textInput.files[0]);
+      if (logoInput.files && logoInput.files[0]) {
+        formData.append('logo', logoInput.files[0]);
+      }
+
+      const res = await fetch('/api/upload_assets', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        rows = data.rows;
+        audioElem.src = data.audio_url;
+        document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+
+        if (data.has_logo) {
+          const logoEl = document.getElementById('logo-preview');
+          logoEl.src = '/api/get_logo';
+          logoEl.classList.remove('hidden');
+        }
+
+        renderTimeline();
+        selectSegment(0);
+      } else {
+        alert(data.error);
+      }
+    }
+
+    async function shiftAllTimestamps(offsetSec) {
+      if (!rows || rows.length === 0) return;
+      const res = await fetch('/api/shift_all_timestamps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offset_sec: offsetSec })
+      });
+      const data = await res.json();
+      if (data.success) {
+        rows = data.rows;
+        renderTimeline();
+        selectSegment(currentIndex);
+      }
+    }
+
+    async function insertNewRow(afterIdx, event) {
+      event.stopPropagation();
+      const res = await fetch('/api/insert_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ after_index: afterIdx })
+      });
+      const data = await res.json();
+      if (data.success) {
+        rows = data.rows;
+        document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+        renderTimeline();
+        selectSegment(data.inserted_index);
+      }
+    }
+
+    async function deleteSegment(idx, event) {
+      event.stopPropagation();
+      if (!confirm(`Segment #${idx + 1} ကို ဖျက်ရန် သေချာပါသလား?`)) return;
+
+      const res = await fetch('/api/delete_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index: idx })
+      });
+      const data = await res.json();
+      if (data.success) {
+        rows = data.rows;
+        document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+        if (currentIndex >= rows.length) currentIndex = Math.max(0, rows.length - 1);
+        renderTimeline();
+        if (rows.length > 0) selectSegment(currentIndex);
+      }
+    }
+
+    async function updateSegmentTime(idx, field, val) {
+      const num = parseFloat(val);
+      if (isNaN(num)) return;
+      rows[idx][field] = num;
+      rows[idx].duration = Math.round(Math.max(0, rows[idx].end_time - rows[idx].start_time) * 100) / 100;
+      
+      await fetch('/api/update_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rows[idx])
+      });
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('segment-list');
+      container.innerHTML = "";
+      rows.forEach((r, idx) => {
+        const wrapDiv = document.createElement('div');
+        wrapDiv.className = "flex flex-col";
+
+        const item = document.createElement('div');
+        item.className = `p-2.5 rounded-lg border text-xs cursor-pointer transition flex items-center justify-between gap-2.5 ${
+          idx === currentIndex ? 'bg-indigo-950/80 border-indigo-500 shadow-md' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+        }`;
+        item.onclick = () => selectSegment(idx);
+
+        const cleanTxt = r.caption.replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
+
+        item.innerHTML = `
+          <span class="font-mono text-[10px] text-indigo-400 font-bold w-5 shrink-0">#${idx + 1}</span>
+          <div class="flex-1 truncate font-mm text-slate-200">${cleanTxt}</div>
+          
+          <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+            <input type="number" step="0.1" value="${r.start_time}" 
+              onchange="updateSegmentTime(${idx}, 'start_time', this.value)"
+              class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 font-mono text-[11px] text-emerald-400 text-center focus:border-indigo-500 outline-none">
+            <span class="text-slate-600">-</span>
+            <input type="number" step="0.1" value="${r.end_time}" 
+              onchange="updateSegmentTime(${idx}, 'end_time', this.value)"
+              class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 font-mono text-[11px] text-amber-400 text-center focus:border-indigo-500 outline-none">
+          </div>
+
+          <button onclick="deleteSegment(${idx}, event)" class="text-slate-500 hover:text-red-400 p-1 transition shrink-0" title="Delete Segment">
+            🗑️
+          </button>
+        `;
+        wrapDiv.appendChild(item);
+
+        const divider = document.createElement('div');
+        divider.className = "relative flex items-center justify-center h-4 group cursor-pointer my-0.5";
+        divider.title = "Insert New Split Row Here";
+        divider.innerHTML = `
+          <div class="w-full h-px bg-transparent group-hover:bg-indigo-500/50 transition"></div>
+          <button onclick="insertNewRow(${idx}, event)" 
+                  class="absolute opacity-0 group-hover:opacity-100 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow-lg transition transform group-hover:scale-110">
+            +
+          </button>
+        `;
+        wrapDiv.appendChild(divider);
+
+        container.appendChild(wrapDiv);
+      });
+    }
+
+    function adjustFontSettings() {
+      const sz = parseInt(document.getElementById('gen-font-size').value) || 48;
+      const sp = parseInt(document.getElementById('gen-line-spacing').value) || 26;
+      const el = document.getElementById('canvas-text');
+
+      if (currentFormat === 'mobile') {
+        const previewSz = Math.max(11, Math.round(sz * 0.28));
+        const previewSp = Math.max(4, Math.round(sp * 0.28));
+        el.style.fontSize = `${previewSz}px`;
+        el.style.lineHeight = `${previewSz + previewSp + 4}px`;
+        el.style.maxWidth = '250px';
+      } else {
+        el.style.fontSize = '24px';
+        el.style.lineHeight = '38px';
+        el.style.maxWidth = '90%';
+      }
+    }
+
+    function selectSegment(idx) {
+      if (!rows || rows.length === 0) return;
+      currentIndex = idx;
+      renderTimeline();
+      const r = rows[idx];
+      const canvasText = document.getElementById('canvas-text');
+      canvasText.innerText = r.caption;
+      audioElem.currentTime = r.start_time;
+
+      const canvasBg = document.getElementById('canvas-bg');
+      const canvasBgBlur = document.getElementById('canvas-bg-blur');
+      const canvasBgCenter = document.getElementById('canvas-bg-center');
+
+      if (r.matched_img) {
+        canvasBg.src = r.matched_img;
+        canvasBgBlur.src = r.matched_img;
+        canvasBgCenter.src = r.matched_img;
+
+        if (currentFormat === 'mobile') {
+          canvasBg.classList.add('hidden');
+          canvasBgBlur.classList.remove('hidden');
+          document.getElementById('mobile-center-banner').classList.remove('hidden');
+        } else {
+          canvasBg.classList.remove('hidden');
+          canvasBgBlur.classList.add('hidden');
+          document.getElementById('mobile-center-banner').classList.add('hidden');
+        }
+      } else {
+        canvasBg.classList.add('hidden');
+        canvasBgBlur.classList.add('hidden');
+        document.getElementById('mobile-center-banner').classList.add('hidden');
+      }
+
+      adjustFontSettings();
+    }
+
+    function syncCanvasToMemory() {
+      if (!rows[currentIndex]) return;
+      rows[currentIndex].caption = document.getElementById('canvas-text').innerText;
+      fetch('/api/update_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rows[currentIndex])
+      });
+    }
+
+    function applyBoxStyle() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const text = selection.toString();
+      if (!text.trim()) return;
+
+      const bg = document.getElementById('tool-box-bg').value;
+      const bc = document.getElementById('tool-box-bc').value;
+
+      const span = document.createElement('span');
+      span.setAttribute('data-style', 'box');
+      span.setAttribute('data-bg', bg);
+      span.setAttribute('data-bc', bc);
+      span.style.backgroundColor = bg;
+      span.style.border = `2px solid ${bc}`;
+      span.style.padding = '2px 8px';
+      span.style.borderRadius = '4px';
+      span.textContent = text;
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      syncCanvasToMemory();
+    }
+
+    function applyOutlineStyle() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const text = selection.toString();
+      if (!text.trim()) return;
+
+      const c = document.getElementById('tool-outline-c').value;
+      const span = document.createElement('span');
+      span.setAttribute('data-style', 'outline');
+      span.setAttribute('data-w', '4');
+      span.setAttribute('data-c', c);
+      span.style.textShadow = `-2px -2px 0 ${c}, 2px -2px 0 ${c}, -2px 2px 0 ${c}, 2px 2px 0 ${c}`;
+      span.textContent = text;
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      syncCanvasToMemory();
+    }
+
+    function clearSelectedStyle() {
+      const el = document.getElementById('canvas-text');
+      el.innerHTML = el.innerText;
+      syncCanvasToMemory();
+    }
+
+    function adjustDimmer(val) {
+      document.getElementById('canvas-dimmer').style.backgroundColor = `rgba(0, 0, 0, ${val / 100})`;
+    }
+
+    function togglePlay() {
+      const btn = document.getElementById('btn-play');
+      if (audioElem.paused) {
+        audioElem.play();
+        btn.innerText = "⏸ Pause";
+        btn.className = "px-5 py-2 rounded-lg bg-amber-600 text-white font-semibold text-xs";
+      } else {
+        audioElem.pause();
+        btn.innerText = "▶ Play (Space)";
+        btn.className = "px-5 py-2 rounded-lg bg-emerald-600 text-white font-semibold text-xs";
+      }
+    }
+
+    audioElem.ontimeupdate = () => {
+      const sec = audioElem.currentTime;
+      const mins = Math.floor(sec / 60);
+      const rem = (sec % 60).toFixed(2);
+      document.getElementById('clock').innerText = `${String(mins).padStart(2, '0')}:${String(rem).padStart(5, '0')}`;
+
+      if (rows[currentIndex] && sec >= rows[currentIndex].end_time && currentIndex < rows.length - 1) {
+        selectSegment(currentIndex + 1);
+      }
+    };
+
+    async function stampNext() {
+      if (!rows[currentIndex]) return;
+      const cur = audioElem.currentTime;
+      rows[currentIndex].end_time = parseFloat(cur.toFixed(2));
+      
+      await fetch('/api/update_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rows[currentIndex])
+      });
+
+      if (currentIndex < rows.length - 1) {
+        rows[currentIndex + 1].start_time = parseFloat(cur.toFixed(2));
+        selectSegment(currentIndex + 1);
+      }
+    }
+
+    async function startRender() {
+      const formData = new FormData();
+      formData.append('format', currentFormat);
+      formData.append('font_size', document.getElementById('gen-font-size').value);
+      formData.append('line_spacing', document.getElementById('gen-line-spacing').value);
+      formData.append('opacity', document.getElementById('gen-opacity').value);
+      formData.append('enable_bgm', document.getElementById('check-enable-bgm').checked);
+
+      const res = await fetch('/api/start_render', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!data.success) alert(data.error);
+    }
+
+    function downloadVideo() {
+      window.location.href = '/api/download_video';
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && e.target.id !== 'canvas-text' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        togglePlay();
+      }
+      if (e.code === 'Enter' && e.target.id !== 'canvas-text' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        stampNext();
+      }
+    });
+  </script>
 </body>
 </html>
