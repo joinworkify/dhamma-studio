@@ -1,19 +1,31 @@
-import html
 import os
-import platform
-from pathlib import Path
 import re
+import html
 import shutil
+import platform
 import subprocess
 import tempfile
+from pathlib import Path
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-import mutagen
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from sentence_transformers import SentenceTransformer, util
 import torch
 
 BASE_DIR = Path(__file__).resolve().parent
 CURRENT_OS = platform.system().lower()
+
+CACHE_DIR = BASE_DIR / "data" / "cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+_CLIP_MODEL = None
+
+
+def get_clip_model():
+    global _CLIP_MODEL
+    if _CLIP_MODEL is None:
+        _CLIP_MODEL = SentenceTransformer("clip-ViT-B-32")
+    return _CLIP_MODEL
 
 
 def _resolve_ffmpeg():
@@ -26,14 +38,89 @@ def _resolve_ffmpeg():
 
 
 FFMPEG_BIN = _resolve_ffmpeg()
-_CLIP_MODEL = None
 
 
-def get_clip_model():
-    global _CLIP_MODEL
-    if _CLIP_MODEL is None:
-        _CLIP_MODEL = SentenceTransformer("clip-ViT-B-32")
-    return _CLIP_MODEL
+def resolve_font_path(target_lang: str = "my"):
+    """
+    ရွေးချယ်ထားသော Language အလိုက် သင့်လျော်သော Font ဖိုင်ကို တိကျစွာ ရှာဖွေပေးခြင်း
+    """
+    lang = (target_lang or "my").lower().strip()
+
+    # 1. ဂျပန် (Japanese)
+    if "ja" in lang or "japan" in lang:
+        for p in [
+            Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+            Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+            Path("/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"),
+            Path("/usr/share/fonts/truetype/takao-gothic/TakaoPGothic.ttf"),
+            BASE_DIR / "fonts" / "NotoSansJP-Regular.ttf",
+            Path("C:/Windows/Fonts/msgothic.ttc"),
+        ]:
+            if p.exists(): return str(p.resolve())
+
+    # 2. တရုတ် (Chinese)
+    elif "zh" in lang or "cn" in lang or "tw" in lang:
+        for p in [
+            Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+            Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+            BASE_DIR / "fonts" / "NotoSansSC-Regular.ttf",
+            Path("C:/Windows/Fonts/msyh.ttc"),
+        ]:
+            if p.exists(): return str(p.resolve())
+
+    # 3. ကိုရီးယား (Korean)
+    elif "ko" in lang or "korean" in lang:
+        for p in [
+            Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+            Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+            BASE_DIR / "fonts" / "NotoSansKR-Regular.ttf",
+            Path("C:/Windows/Fonts/malgun.ttf"),
+        ]:
+            if p.exists(): return str(p.resolve())
+
+    # 4. ထိုင်း (Thai)
+    elif "th" in lang or "thai" in lang:
+        for p in [
+            Path("/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/thai/Loma.ttf"),
+            Path("/usr/share/fonts/truetype/tlwg/Loma.ttf"),
+            BASE_DIR / "fonts" / "NotoSansThai-Regular.ttf",
+            Path("C:/Windows/Fonts/leelawad.ttf"),
+        ]:
+            if p.exists(): return str(p.resolve())
+
+    # 5. လက်တင် အက္ခရာသုံး ဘာသာများ (English, Vietnamese, Spanish, Tagalog, French, German)
+    elif lang in ["en", "vi", "es", "tl", "fr", "de"]:
+        for p in [
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+            Path("C:/Windows/Fonts/arial.ttf"),
+        ]:
+            if p.exists(): return str(p.resolve())
+
+    # 6. မြန်မာစာနှင့် ပါဠိတော် (Myanmar / Pali Default)
+    for p in [
+        BASE_DIR / "fonts" / "NamKhone Grand (2).ttf",
+        BASE_DIR / "fonts" / "NamKhone Grand.ttf",
+        BASE_DIR / "fonts" / "NamKhoneGrand.ttf",
+        BASE_DIR / "NamKhone Grand.ttf",
+        Path("/usr/share/fonts/truetype/noto/NotoSansMyanmar-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansMyanmar-Regular.ttf"),
+        Path("C:/Windows/Fonts/mmrtextb.ttf"),
+        Path("C:/Windows/Fonts/mmrtext.ttf"),
+    ]:
+        if p.exists(): return str(p.resolve())
+
+    # Fallback any available system font
+    for p in [
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+    ]:
+        if p.exists(): return str(p.resolve())
+
+    return ""
 
 
 def resolve_bgm_path():
@@ -48,12 +135,12 @@ def resolve_bgm_path():
     return ""
 
 
-def scan_and_index_images(media_dir, media_files, progress_cb=None):
-    cache_file = Path(media_dir) / ".clip_embeddings_cache.pt"
-    current_valid_paths = [
-        p for p in media_files 
-        if p.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]
-    ]
+def scan_and_index_images(media_files, progress_cb=None):
+    cache_file = CACHE_DIR / "clip_embeddings_cache.pt"
+    current_valid_paths = sorted(
+        [p for p in media_files if p.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]],
+        key=lambda x: x.name.lower()
+    )
     if not current_valid_paths:
         return [], None
 
@@ -67,448 +154,439 @@ def scan_and_index_images(media_dir, media_files, progress_cb=None):
             cached_dict = {}
 
     new_paths = [p for p in current_valid_paths if str(p.resolve()) not in cached_dict]
+
     if new_paths:
         if progress_cb:
-            progress_cb(f"AI scanning {len(new_paths)} media files...", 10)
+            progress_cb(f"AI scanning {len(new_paths)} media files...", 25)
         model = get_clip_model()
         new_images = []
-        processable_paths = []
+        processable = []
         for p in new_paths:
             try:
                 img = Image.open(p).convert("RGB")
-                img.thumbnail((384, 384), Image.Resampling.BILINEAR)
+                img.thumbnail((320, 320), Image.Resampling.BILINEAR)
                 new_images.append(img)
-                processable_paths.append(p)
+                processable.append(p)
             except Exception:
                 continue
+
         if new_images:
             with torch.no_grad():
-                new_embeddings = model.encode(
-                    new_images, batch_size=32, convert_to_tensor=True, show_progress_bar=False
-                )
-            for p, emb in zip(processable_paths, new_embeddings):
+                new_embeddings = model.encode(new_images, batch_size=32, convert_to_tensor=True, show_progress_bar=False)
+            for p, emb in zip(processable, new_embeddings):
                 cached_dict[str(p.resolve())] = emb.cpu()
             try:
                 torch.save(cached_dict, cache_file)
             except Exception:
                 pass
 
-    final_paths = []
-    final_embeddings_list = []
+    final_paths, final_embeddings_list = [], []
     for p in current_valid_paths:
-        p_str = str(p.resolve())
-        if p_str in cached_dict:
+        k = str(p.resolve())
+        if k in cached_dict:
             final_paths.append(p)
-            final_embeddings_list.append(cached_dict[p_str])
+            final_embeddings_list.append(cached_dict[k])
 
     if not final_embeddings_list:
         return final_paths, None
     return final_paths, torch.stack(final_embeddings_list)
 
 
-def find_best_image_by_clip(caption_text, valid_paths, image_embeddings, fallback_file, used_paths=None):
-    if image_embeddings is None or len(valid_paths) == 0:
-        return fallback_file
-    clean_text = re.sub(r"<[^>]+>", "", caption_text).strip()
-    if not clean_text:
-        return fallback_file
-    if used_paths is None:
-        used_paths = set()
-    try:
-        model = get_clip_model()
-        with torch.no_grad():
-            text_embedding = model.encode(clean_text, convert_to_tensor=True)
-            cos_scores = util.cos_sim(text_embedding, image_embeddings)[0]
-            sorted_indices = torch.argsort(cos_scores, descending=True).tolist()
-            for idx in sorted_indices:
-                candidate = valid_paths[idx]
-                if candidate not in used_paths:
-                    return candidate
-            return valid_paths[sorted_indices[0]]
-    except Exception:
-        return fallback_file
+def batch_match_images_hybrid(clip_queries, valid_paths, image_embeddings, top_k=5, penalty_weight=0.35):
+    if not valid_paths:
+        return [Path() for _ in clip_queries]
+    if image_embeddings is None:
+        return [valid_paths[i % len(valid_paths)] for i in range(len(clip_queries))]
+
+    model = get_clip_model()
+    clean_queries = [str(q).strip() or "dhamma temple monks nature" for q in clip_queries]
+    with torch.no_grad():
+        text_embeddings = model.encode(clean_queries, batch_size=32, convert_to_tensor=True)
+        cos_matrix = util.cos_sim(text_embeddings, image_embeddings)
+
+    matched_results = []
+    usage_counts = Counter()
+    total_imgs = len(valid_paths)
+
+    for row in cos_matrix:
+        scores = row.tolist()
+        unused = [i for i in range(total_imgs) if usage_counts[i] == 0]
+        candidates = unused if unused else list(range(total_imgs))
+
+        best_idx = max(candidates, key=lambda i: scores[i] - (usage_counts[i] * max(penalty_weight, 0.35)))
+        usage_counts[best_idx] += 1
+        matched_results.append(valid_paths[best_idx])
+
+    return matched_results
 
 
-def get_render_font(size):
-    font_candidates = [
-        BASE_DIR / "fonts" / "NamKhone Grand (2).ttf",
-        BASE_DIR / "fonts" / "NamKhone Grand.ttf",
-        BASE_DIR / "NamKhone Grand.ttf",
-        Path("/usr/share/fonts/truetype/noto/NotoSansMyanmar-Bold.ttf"),
-        Path("/usr/share/fonts/truetype/noto/NotoSansMyanmar-Regular.ttf"),
-        Path("C:/Windows/Fonts/mmrtextb.ttf"),
-        Path("C:/Windows/Fonts/mmrtext.ttf"),
-    ]
-    for c in font_candidates:
-        c_path = Path(c)
-        if c_path.exists():
-            try:
-                return ImageFont.truetype(str(c_path), size, layout_engine=ImageFont.Layout.RAQM)
-            except Exception:
-                try:
-                    return ImageFont.truetype(str(c_path), size)
-                except Exception:
-                    pass
-    return ImageFont.load_default()
+def parse_html_tokens(html_content: str):
+    raw = html.unescape(str(html_content or "")).strip()
+    raw = re.sub(r'<div><br\s*/?></div>', '\n', raw, flags=re.I)
+    raw = re.sub(r'<div>', '\n', raw, flags=re.I)
+    raw = re.sub(r'</div>', '', raw, flags=re.I)
+    raw = re.sub(r'<br\s*/?>', '\n', raw, flags=re.I)
+    raw = re.sub(r'<p\s*[^>]*>', '\n', raw, flags=re.I)
+    raw = re.sub(r'</p>', '', raw, flags=re.I)
 
-
-def split_into_screens_and_lines(raw_text, max_pixel_w, font, max_lines_per_screen=4):
-    clean_text = re.sub(r"\r\n|\r", "\n", raw_text).strip()
-    first_break = re.search(r"[။\n]", clean_text)
-    if first_break:
-        split_idx = first_break.end()
-        title_part = clean_text[:split_idx].strip()
-        body_part = clean_text[split_idx:].strip()
-    else:
-        title_part = clean_text
-        body_part = ""
-
-    screens = []
-    dummy_img = Image.new("RGBA", (1, 1))
-    draw = ImageDraw.Draw(dummy_img)
-
-    if title_part:
-        screens.append([title_part])
-
-    if not body_part:
-        return screens
-
-    clauses = [c.strip() for c in re.split(r"(?<=[၊။\n])", body_part) if c.strip()]
-    all_lines = []
-    curr_line = ""
-
-    for clause in clauses:
-        test = f"{curr_line} {clause}".strip() if curr_line else clause
-        bbox = draw.textbbox((0, 0), test, font=font)
-        if (bbox[2] - bbox[0]) <= max_pixel_w and not clause.endswith("။"):
-            curr_line = test
-        else:
-            if (bbox[2] - bbox[0]) <= max_pixel_w:
-                all_lines.append(test)
-                curr_line = ""
-            else:
-                if curr_line:
-                    all_lines.append(curr_line)
-                words = clause.split(" ")
-                sub_w = ""
-                for w in words:
-                    sub_t = f"{sub_w} {w}".strip() if sub_w else w
-                    if (draw.textbbox((0, 0), sub_t, font=font)[2] - draw.textbbox((0, 0), sub_t, font=font)[0]) <= max_pixel_w:
-                        sub_w = sub_t
-                    else:
-                        if sub_w:
-                            all_lines.append(sub_w)
-                        sub_w = w
-                curr_line = sub_w
-
-    if curr_line:
-        all_lines.append(curr_line)
-
-    for i in range(0, len(all_lines), max_lines_per_screen):
-        chunk = all_lines[i:i + max_lines_per_screen]
-        if chunk:
-            screens.append(chunk)
-
-    return screens
-
-
-def hex_to_rgba(hex_code, opacity_pct=100):
-    hex_code = str(hex_code).lstrip("#")
-    if len(hex_code) == 6:
-        r, g, b = tuple(int(hex_code[i:i + 2], 16) for i in (0, 2, 4))
-    else:
-        r, g, b = 0, 0, 0
-    a = int(255 * (float(opacity_pct) / 100.0))
-    return (r, g, b, a)
-
-
-def clean_html_text(text_str):
-    if not text_str:
-        return ""
-    no_tags = re.sub(r"<[^>]+>", "", text_str)
-    unescaped = html.unescape(no_tags)
-    return unescaped.replace("\u00a0", " ").strip()
-
-
-def parse_styled_blocks(raw_text):
-    if not raw_text:
-        return []
-    text_str = str(raw_text).strip()
-    blocks = []
-    raw_lines = re.split(r"</?(?:div|p|br)[^>]*>", text_str)
-    span_regex = re.compile(r"<span([^>]*)>(.*?)</span>", re.IGNORECASE | re.DOTALL)
-    attr_regex = re.compile(r'([a-zA-Z0-9_-]+)="([^"]*)"')
-
-    for line in raw_lines:
-        line_clean = line.strip()
-        if not line_clean:
-            continue
-        match = span_regex.search(line_clean)
-        if match:
-            attr_str, inner_content = match.groups()
-            attrs = dict(attr_regex.findall(attr_str))
-            style_type = attrs.get("data-style", "normal")
-            content = clean_html_text(inner_content)
-            if not content:
-                continue
-
-            if style_type == "box":
-                blocks.append({
-                    "text": content,
-                    "is_box": True,
-                    "box_bg": attrs.get("data-bg", "#8c4e12"),
-                    "box_op": 90,
-                    "box_bc": attrs.get("data-bc", "#ffffff"),
-                    "box_bw": 3,
-                    "stroke_w": 2,
-                    "stroke_c": "#000000",
-                })
-            elif style_type == "outline":
-                blocks.append({
-                    "text": content,
-                    "is_box": False,
-                    "stroke_w": int(attrs.get("data-w", 4)),
-                    "stroke_c": attrs.get("data-c", "#000000"),
-                })
-            else:
-                blocks.append({"text": content, "is_box": False, "stroke_w": 4, "stroke_c": "#000000"})
-        else:
-            plain = clean_html_text(line_clean)
-            if plain:
-                blocks.append({"text": plain, "is_box": False, "stroke_w": 4, "stroke_c": "#000000"})
-    return blocks
-
-
-def render_caption_image(raw_html, width, height, font_size, line_spacing, output_path, is_mobile=False):
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    font_normal = get_render_font(font_size)
-
-    plain_text = clean_html_text(raw_html)
-    raw_lines = [l.strip() for l in plain_text.split("\n") if l.strip()]
-
-    if not raw_lines:
-        overlay.save(output_path, "PNG")
-        return
-
-    flattened_items = []
-    total_h = 0
+    raw_lines = raw.split("\n")
+    parsed_lines = []
 
     for l in raw_lines:
-        bbox = draw.textbbox((0, 0), l, font=font_normal)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        flattened_items.append({
-            "text": l,
-            "font": font_normal,
-            "tw": tw, "th": th,
-        })
-        total_h += th + line_spacing
+        l_str = l.strip()
+        if not l_str:
+            continue
 
-    total_h -= line_spacing
-    curr_y = (height - total_h) // 2
+        is_box = ("data-style=\"box\"" in l_str) or ("data-bg=" in l_str) or ("background-color:" in l_str)
+        if is_box:
+            bg_m = re.search(r'data-bg=["\']([^"\']+)["\']', l_str)
+            if not bg_m:
+                bg_m = re.search(r'background-color:\s*([^;"]+)', l_str)
+            bc_m = re.search(r'data-bc=["\']([^"\']+)["\']', l_str)
+            if not bc_m:
+                bc_m = re.search(r'border(?:\-color)?:\s*(?:2px\s+solid\s+)?([^;"]+)', l_str)
 
-    for item in flattened_items:
-        f = item["font"]
-        txt = item["text"]
-        tx = (width - item["tw"]) // 2
-        ty = curr_y
-        curr_y += item["th"] + line_spacing
+            bg = bg_m.group(1).strip() if bg_m else "#8c4e12"
+            bc = bc_m.group(1).strip() if bc_m else "#ffffff"
+            clean_txt = re.sub(r'<[^>]+>', '', l_str).strip()
+            if clean_txt:
+                parsed_lines.append({"text": clean_txt, "style": "box", "bg": bg, "bc": bc})
+                continue
 
-        sw = 5
-        sc = (0, 0, 0, 255)
-        draw.text((tx, ty), txt, font=f, fill=(255, 255, 255, 255), stroke_width=sw, stroke_fill=sc)
+        is_outline = ("data-style=\"outline\"" in l_str) or ("data-c=" in l_str)
+        if is_outline:
+            c_m = re.search(r'data-c=["\']([^"\']+)["\']', l_str)
+            c = c_m.group(1).strip() if c_m else "#000000"
+            clean_txt = re.sub(r'<[^>]+>', '', l_str).strip()
+            if clean_txt:
+                parsed_lines.append({"text": clean_txt, "style": "outline", "outline_color": c})
+                continue
 
-    overlay.save(output_path, "PNG")
+        clean_txt = re.sub(r'<[^>]+>', '', l_str).strip()
+        if clean_txt:
+            parsed_lines.append({"text": clean_txt, "style": "normal"})
 
-
-def create_dimmer_and_logo(width, height, logo_path, opacity_pct, output_path, is_mobile=False):
-    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    alpha = int(255 * (opacity_pct / 100.0))
-    draw.rectangle([0, 0, width, height], fill=(0, 0, 0, alpha))
-
-    if logo_path and os.path.exists(logo_path):
-        try:
-            logo_img = Image.open(logo_path).convert("RGBA")
-            logo_size = int(140 if is_mobile else 120)
-            logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
-            pos_x = width - logo_img.width - (50 if is_mobile else 40)
-            pos_y = 50 if is_mobile else 35
-            overlay.paste(logo_img, (pos_x, pos_y), logo_img)
-        except Exception:
-            pass
-    overlay.save(output_path, "PNG")
+    return parsed_lines
 
 
-def prepare_background_image(img_path, width, height, output_path, is_mobile=False):
+def wrap_caption_items(parsed_lines, draw, font, max_width):
+    """Wrap caption lines to the same usable width as the browser preview.
+    Supports both space-separated languages and scripts without spaces.
+    """
+    wrapped = []
+
+    def text_width(value):
+        if not value:
+            return 0
+        box = draw.textbbox((0, 0), value, font=font)
+        return box[2] - box[0]
+
+    def split_piece(piece):
+        piece = str(piece or "").strip()
+        if not piece:
+            return []
+        if text_width(piece) <= max_width:
+            return [piece]
+
+        # Prefer word wrapping for Latin/space-separated text.
+        words = piece.split()
+        if len(words) > 1:
+            lines = []
+            current = ""
+            for word in words:
+                candidate = word if not current else current + " " + word
+                if text_width(candidate) <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    # A single very long word still needs character wrapping.
+                    if text_width(word) > max_width:
+                        chunk = ""
+                        for ch in word:
+                            test = chunk + ch
+                            if chunk and text_width(test) > max_width:
+                                lines.append(chunk)
+                                chunk = ch
+                            else:
+                                chunk = test
+                        current = chunk
+                    else:
+                        current = word
+            if current:
+                lines.append(current)
+            return lines
+
+        # Character wrapping for Burmese, CJK, Thai and long unspaced text.
+        lines = []
+        current = ""
+        for ch in piece:
+            candidate = current + ch
+            if current and text_width(candidate) > max_width:
+                lines.append(current)
+                current = ch
+            else:
+                current = candidate
+        if current:
+            lines.append(current)
+        return lines
+
+    for item in parsed_lines:
+        original = str(item.get("text", ""))
+        for explicit_line in original.splitlines() or [original]:
+            parts = split_piece(explicit_line)
+            for part in parts:
+                new_item = dict(item)
+                new_item["text"] = part
+                wrapped.append(new_item)
+    return wrapped
+
+
+def build_final_segment_frame(bg_path, width, height, parsed_lines, font_path, font_size, line_spacing, opacity_pct, logo_path, is_mobile=False):
     try:
-        orig = Image.open(img_path).convert("RGB")
+        orig = Image.open(bg_path).convert("RGB")
         if is_mobile:
-            # 1. Full Blurred Dark Background (9:16)
-            scale_bg = max(width / orig.width, height / orig.height)
-            bg_w, bg_h = int(orig.width * scale_bg), int(orig.height * scale_bg)
-            resized_bg = orig.resize((bg_w, bg_h), Image.Resampling.BILINEAR)
-            crop_x = (bg_w - width) // 2
-            crop_y = (bg_h - height) // 2
-            canvas = resized_bg.crop((crop_x, crop_y, crop_x + width, crop_y + height))
-            canvas = canvas.filter(ImageFilter.GaussianBlur(radius=35))
-            dark_dim = Image.new("RGB", (width, height), (0, 0, 0))
-            canvas = Image.blend(canvas, dark_dim, 0.45)
-
-            # 2. Sharp Center Landscape Banner Frame
-            fg_w = width
-            fg_h = int(orig.height * (width / orig.width))
-            if fg_h > int(height * 0.55):
-                fg_h = int(height * 0.55)
-            fg_img = orig.resize((fg_w, fg_h), Image.Resampling.BILINEAR)
+            scale = max(width / orig.width, height / orig.height)
+            bg_w, bg_h = int(orig.width * scale), int(orig.height * scale)
+            bg = orig.resize((bg_w, bg_h), Image.Resampling.BILINEAR)
+            cx, cy = (bg_w - width) // 2, (bg_h - height) // 2
+            base_canvas = bg.crop((cx, cy, cx + width, cy + height)).filter(ImageFilter.BoxBlur(radius=18))
             
-            pos_x = 0
-            pos_y = (height - fg_h) // 2
-            canvas.paste(fg_img, (pos_x, pos_y))
-
-            # 3. Subtle Border Divider Lines
-            draw = ImageDraw.Draw(canvas)
-            draw.line([(0, pos_y), (width, pos_y)], fill=(120, 120, 120), width=2)
-            draw.line([(0, pos_y + fg_h), (width, pos_y + fg_h)], fill=(120, 120, 120), width=2)
-
-            canvas.save(output_path, "JPEG", quality=92)
+            fg_w = width
+            fg_h = min(int(height * 0.52), int(orig.height * (width / orig.width)))
+            fg = orig.resize((fg_w, fg_h), Image.Resampling.BILINEAR)
+            base_canvas.paste(fg, (0, (height - fg_h) // 2))
         else:
             scale = max(width / orig.width, height / orig.height)
             new_w, new_h = int(orig.width * scale), int(orig.height * scale)
             resized = orig.resize((new_w, new_h), Image.Resampling.BILINEAR)
-            crop_x = (new_w - width) // 2
-            crop_y = (new_h - height) // 2
-            canvas = resized.crop((crop_x, crop_y, crop_x + width, crop_y + height))
-            canvas.save(output_path, "JPEG", quality=90)
+            cx, cy = (new_w - width) // 2, (new_h - height) // 2
+            base_canvas = resized.crop((cx, cy, cx + width, cy + height))
     except Exception:
-        fallback = Image.new("RGB", (width, height), (15, 15, 15))
-        fallback.save(output_path, "JPEG")
+        base_canvas = Image.new("RGB", (width, height), (20, 20, 25))
+
+    frame = base_canvas.convert("RGBA")
+    dimmer = Image.new("RGBA", (width, height), (0, 0, 0, int(255 * (opacity_pct / 100.0))))
+    frame = Image.alpha_composite(frame, dimmer)
+
+    if logo_path and os.path.exists(logo_path):
+        try:
+            logo_img = Image.open(logo_path).convert("RGBA")
+            logo_size = int(height * 0.08)
+            logo_img.thumbnail((logo_size, logo_size), Image.Resampling.BILINEAR)
+            pos_x = width - logo_img.width - (35 if is_mobile else 40)
+            pos_y = 35 if is_mobile else 30
+            frame.paste(logo_img, (pos_x, pos_y), logo_img)
+        except Exception:
+            pass
+
+    draw = ImageDraw.Draw(frame)
+    try:
+        if font_path and os.path.exists(font_path):
+            font = ImageFont.truetype(font_path, font_size, layout_engine=ImageFont.Layout.RAQM)
+        else:
+            font = ImageFont.load_default()
+    except Exception:
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+    # Keep the rendered text inside the same approximate width used by the preview.
+    max_text_width = int(width * (0.86 if is_mobile else 0.88))
+    parsed_lines = wrap_caption_items(parsed_lines, draw, font, max_text_width)
+
+    measured = []
+    total_text_height = 0
+    for item in parsed_lines:
+        txt = item["text"]
+        bbox = draw.textbbox((0, 0), txt, font=font)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        measured.append({"item": item, "w": w, "h": h})
+        total_text_height += h + line_spacing
+
+    if total_text_height > 0:
+        total_text_height -= line_spacing
+
+    curr_y = (height - total_text_height) // 2
+
+    for m in measured:
+        item = m["item"]
+        txt = item["text"]
+        w = m["w"]
+        h = m["h"]
+        curr_x = (width - w) // 2
+        style = item.get("style", "normal")
+
+        if style == "box":
+            bg_color = item.get("bg", "#8c4e12")
+            bc_color = item.get("bc", "#ffffff")
+            pad_x = int(font_size * 0.38)
+            pad_y = int(font_size * 0.16)
+            rect_box = [curr_x - pad_x, curr_y - pad_y, curr_x + w + pad_x, curr_y + h + pad_y]
+            draw.rounded_rectangle(rect_box, radius=10, fill=bg_color, outline=bc_color, width=3)
+            draw.text((curr_x, curr_y), txt, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        elif style == "outline":
+            oc = item.get("outline_color", "#000000")
+            draw.text((curr_x, curr_y), txt, font=font, fill=(255, 255, 255, 255), stroke_width=3, stroke_fill=oc)
+        else:
+            draw.text((curr_x, curr_y), txt, font=font, fill=(255, 255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0, 255))
+
+        curr_y += h + line_spacing
+
+    return frame.convert("RGB")
+
+
+def get_resolution(format_type: str, quality: str = "720p"):
+    is_mobile = (format_type == "mobile")
+    if quality == "1080p":
+        return (1080, 1920) if is_mobile else (1920, 1080)
+    elif quality == "540p":
+        return (540, 960) if is_mobile else (960, 540)
+    else:
+        return (720, 1280) if is_mobile else (1280, 720)
 
 
 def render_all_clips(df, media_dir, audio_path, output_file, logo_path, cfg, progress_cb):
-    temp_dir = Path(tempfile.mkdtemp(prefix="dhamma_render_"))
+    temp_dir = Path(tempfile.mkdtemp(prefix="dhamma_opt_"))
     try:
         format_type = cfg.get("format", "landscape")
+        quality = cfg.get("quality", "720p")
         is_mobile = (format_type == "mobile")
-        width, height = (1080, 1920) if is_mobile else (1920, 1080)
-
-        font_size = int(cfg.get("font_size", 42 if is_mobile else 48))
-        line_spacing = int(cfg.get("line_spacing", 22 if is_mobile else 26))
+        target_lang = str(cfg.get("target_lang", "my")).lower().strip()
+        
+        width, height = get_resolution(format_type, quality)
+        base_font_sz = int(cfg.get("font_size", 38 if is_mobile else 44))
+        scale_ratio = height / (1920 if is_mobile else 1080)
+        font_size = max(18, int(base_font_sz * scale_ratio))
+        line_spacing = max(6, int(int(cfg.get("line_spacing", 26)) * scale_ratio))
         opacity = int(cfg.get("opacity", 45))
-        fps = 12
+        
+        # Target language အတွက် Font ရယူခြင်း
+        font_path = resolve_font_path(target_lang=target_lang)
+
+        search_dirs = [Path(media_dir), BASE_DIR / "uploads" / "images", BASE_DIR / "images", BASE_DIR]
+        fallback_images = []
+        for d in search_dirs:
+            if d.exists():
+                fallback_images += list(d.glob("*.jpg")) + list(d.glob("*.png"))
+        default_fallback = fallback_images[0] if fallback_images else Path("empty.jpg")
+
+        progress_cb(f"Synthesizing [{target_lang.upper()}] scenes...", 15)
+
+        total_rows = len(df)
+        concat_txt = temp_dir / "timeline_concat.txt"
+
+        with open(concat_txt, "w", encoding="utf-8") as f_out:
+            for idx, row in df.iterrows():
+                m_img = row.get("matched_img", "")
+                img_name = Path(m_img).name if m_img else ""
+                
+                source_p = None
+                for d in search_dirs:
+                    if (d / img_name).exists():
+                        source_p = d / img_name
+                        break
+                if not source_p:
+                    source_p = default_fallback
+
+                dur = max(0.4, float(row["end_time"]) - float(row["start_time"]))
+                
+                # Always render the caption currently held by the preview.
+                # This preserves manual edits, deleted punctuation and line breaks.
+                caption_text = str(row.get("caption", ""))
+
+                parsed_tokens = parse_html_tokens(caption_text)
+                
+                frame_img = build_final_segment_frame(
+                    source_p, width, height, parsed_tokens, font_path, font_size,
+                    line_spacing, opacity, logo_path, is_mobile=is_mobile
+                )
+                
+                seg_file = temp_dir / f"seg_{idx}.jpg"
+                frame_img.save(seg_file, "JPEG", quality=92)
+
+                f_out.write(f"file '{str(seg_file.resolve()).replace(chr(92), '/')}'\n")
+                f_out.write(f"duration {dur:.3f}\n")
+
+                if idx % 3 == 0 or idx == total_rows - 1:
+                    pct = 15 + int((idx / max(1, total_rows)) * 30)
+                    progress_cb(f"Synthesized {idx+1}/{total_rows} scenes ({target_lang.upper()})...", pct)
+
+            if total_rows > 0:
+                last_seg = temp_dir / f"seg_{total_rows - 1}.jpg"
+                f_out.write(f"file '{str(last_seg.resolve()).replace(chr(92), '/')}'\n")
+
+        total_duration = max(1.0, float(df["end_time"].max()) if len(df) else 1.0)
+        first_clip_duration = max(0.5, float(df.iloc[0]["end_time"])) if len(df) else total_duration
 
         enable_bgm_cfg = bool(cfg.get("enable_bgm", True))
         bgm_path = resolve_bgm_path()
         has_intro_bgm = (enable_bgm_cfg and bgm_path and os.path.exists(bgm_path))
 
-        supported_exts = [".jpg", ".jpeg", ".png", ".webp"]
-        media_files = sorted(
-            [p for p in Path(media_dir).iterdir() if p.is_file() and p.suffix.lower() in supported_exts]
-        )
-        if not media_files:
-            return False, "No background images found."
+        input_args = [
+            "-f", "concat", "-safe", "0", "-i", str(concat_txt),
+            "-i", str(audio_path)
+        ]
 
-        progress_cb("Analyzing images with AI CLIP...", 15)
-        valid_paths, image_embeddings = scan_and_index_images(media_dir, media_files, progress_cb)
+        if has_intro_bgm:
+            input_args += ["-i", str(bgm_path)]
+            fade_dur = min(1.5, first_clip_duration * 0.3)
+            fade_start = max(0.0, first_clip_duration - fade_dur)
+            filter_complex_str = (
+                f"[2:a]atrim=0:{first_clip_duration:.2f},volume=0.20,"
+                f"afade=t=out:st={fade_start:.2f}:d={fade_dur:.2f}[bgm_intro];"
+                f"[1:a][bgm_intro]amix=inputs=2:duration=first:dropout_transition=0[a_out]"
+            )
+            audio_map = "[a_out]"
+        else:
+            filter_complex_str = ""
+            audio_map = "1:a"
 
-        dimmer_logo_png = temp_dir / "dimmer_logo.png"
-        create_dimmer_and_logo(width, height, logo_path, opacity, str(dimmer_logo_png), is_mobile=is_mobile)
+        cmd = [
+            FFMPEG_BIN, "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
+            *input_args
+        ]
 
-        tasks = []
-        used_images = set()
-        total_rows = len(df)
-        progress_cb("Constructing video chunks...", 25)
+        if filter_complex_str:
+            cmd += ["-filter_complex", filter_complex_str]
 
-        for idx, row in df.iterrows():
-            st = float(row["start_time"])
-            et = float(row["end_time"])
-            dur = max(0.5, et - st)
-            raw_caption = str(row["caption"]).strip()
-
-            if len(used_images) >= len(valid_paths):
-                used_images.clear()
-            media_path = find_best_image_by_clip(raw_caption, valid_paths, image_embeddings, media_files[idx % len(media_files)], used_images)
-            used_images.add(media_path)
-
-            bg_jpg = temp_dir / f"bg_{idx:04d}.jpg"
-            prepare_background_image(media_path, width, height, str(bg_jpg), is_mobile=is_mobile)
-
-            text_png = temp_dir / f"txt_{idx:04d}.png"
-            render_caption_image(raw_caption, width, height, font_size, line_spacing, str(text_png), is_mobile=is_mobile)
-
-            clip_mp4 = temp_dir / f"clip_{idx:04d}.mp4"
-            include_bgm = (idx == 0 and has_intro_bgm)
-
-            inputs = [
-                "-loop", "1", "-framerate", str(fps), "-i", str(bg_jpg),
-                "-loop", "1", "-framerate", str(fps), "-i", str(dimmer_logo_png),
-                "-loop", "1", "-framerate", str(fps), "-i", str(text_png),
-                "-ss", str(st), "-to", str(et), "-i", str(audio_path),
-            ]
-
-            if include_bgm:
-                inputs += ["-stream_loop", "-1", "-i", str(bgm_path)]
-                filter_complex = (
-                    "[0:v][1:v]overlay=0:0[bg_dim];"
-                    "[2:v]fade=t=in:st=0:d=0.2:alpha=1[text_faded];"
-                    "[bg_dim][text_faded]overlay=0:0[v];"
-                    "[4:a]volume=0.35[bgm_a];"
-                    "[3:a][bgm_a]amix=inputs=2:duration=first:dropout_transition=2[a]"
-                )
-                map_audio = "[a]"
-            else:
-                filter_complex = (
-                    "[0:v][1:v]overlay=0:0[bg_dim];"
-                    "[2:v]fade=t=in:st=0:d=0.2:alpha=1[text_faded];"
-                    "[bg_dim][text_faded]overlay=0:0[v]"
-                )
-                map_audio = "3:a"
-
-            cmd = [
-                FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
-                *inputs,
-                "-filter_complex", filter_complex,
-                "-map", "[v]",
-                "-map", map_audio,
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "128k",
-                "-t", str(dur),
-                str(clip_mp4)
-            ]
-            tasks.append((cmd, clip_mp4))
-
-        rendered_clips = []
-        with ThreadPoolExecutor(max_workers=min(os.cpu_count() or 2, 4)) as executor:
-            futures = [executor.submit(subprocess.run, t[0], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for t in tasks]
-            for i, f in enumerate(futures):
-                res = f.result()
-                if res.returncode == 0:
-                    rendered_clips.append(tasks[i][1])
-                pct = 25 + int(((i + 1) / total_rows) * 65)
-                progress_cb(f"Rendering segment {i + 1}/{total_rows}...", pct)
-
-        if not rendered_clips:
-            return False, "Failed to render video clips."
-
-        progress_cb("Merging all video clips...", 92)
-        concat_txt = temp_dir / "concat.txt"
-        with open(concat_txt, "w", encoding="utf-8") as f:
-            for c in rendered_clips:
-                f.write(f"file '{str(c.resolve()).replace('\\', '/')}'\n")
-
-        merge_cmd = [
-            FFMPEG_BIN, "-y", "-hide_banner", "-loglevel", "error",
-            "-f", "concat", "-safe", "0",
-            "-i", str(concat_txt),
-            "-c", "copy",
-            "-movflags", "+faststart",
+        cmd += [
+            "-map", "0:v",
+            "-map", audio_map,
+            "-t", f"{total_duration:.3f}",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "22",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-progress", "pipe:1",
+            "-nostats",
             str(output_file)
         ]
-        subprocess.run(merge_cmd, check=True)
-        progress_cb("Done! Video ready in Downloads folder.", 100)
-        return True, str(output_file)
 
+        progress_cb(f"Encoding [{target_lang.upper()}] video...", 50)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+
+        for line in process.stdout:
+            line = line.strip()
+            if line.startswith("out_time_us="):
+                try:
+                    val = int(line.split("=", 1)[1])
+                    elapsed = val / 1_000_000
+                    pct = min(99, 50 + int((elapsed / total_duration) * 48))
+                    progress_cb(f"Rendering {target_lang.upper()} ({int((elapsed/total_duration)*100)}%)...", pct)
+                except Exception:
+                    pass
+
+        process.wait(timeout=300)
+        if process.returncode != 0:
+            err = process.stderr.read()
+            return False, f"FFmpeg Error: {err}"
+
+        progress_cb(f"[{target_lang.upper()}] Video ready! Click Download.", 100)
+        return True, str(output_file)
     except Exception as e:
         return False, str(e)
     finally:

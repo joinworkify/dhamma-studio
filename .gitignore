@@ -12,3 +12,6 @@ vendor/
 .DS_Store
 uploads/
 temp_uploads/
+images/
+data/
+output_renders/

@@ -1,49 +1,54 @@
 <!DOCTYPE html>
-<html lang="my">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dhamma Studio - Interactive Live Canvas</title>
+  <title>Dhamma Studio - Dynamic Excel Sync</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @font-face {
       font-family: 'NamKhone';
-      src: url('/static/fonts/NamKhone Grand (2).ttf'), url('/static/fonts/NamKhone Grand.ttf'), url('/fonts/NamKhone Grand.ttf');
+      src: url('/fonts/NamKhone%20Grand%20%282%29.ttf'), url('/fonts/NamKhone%20Grand.ttf'), url('/fonts/NamKhone Grand (2).ttf'), url('/fonts/NamKhone Grand.ttf');
     }
     .font-mm { font-family: 'NamKhone', sans-serif; }
     .text-stroke {
       text-shadow:
-        -2.5px -2.5px 0 #000,
-         2.5px -2.5px 0 #000,
-        -2.5px  2.5px 0 #000,
-         2.5px  2.5px 0 #000,
-        -3.5px 0 0 #000,
-         3.5px 0 0 #000,
-         0 -3.5px 0 #000,
-         0  3.5px 0 #000;
+        -2px -2px 0 #000,
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+        -3px 0 0 #000,
+         3px 0 0 #000,
+         0 -3px 0 #000,
+         0  3px 0 #000;
     }
     .viewport-landscape { width: 100%; aspect-ratio: 16/9; }
-    .viewport-mobile { height: 100%; max-height: 480px; aspect-ratio: 9/16; }
+    .viewport-mobile { width: min(100%, 390px); height: min(78vh, 620px); max-height: 620px; aspect-ratio: 9/16; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-  </style>
+  
+    /* Gentle Dhamma caption transition */
+    #canvas-text { opacity: 1; transition: opacity 550ms ease-in-out; }
+    #canvas-text.caption-fade-out { opacity: 0; }
+    #canvas-text.caption-fade-in { opacity: 1; }
+
+</style>
 </head>
 <body class="bg-[#090d16] text-slate-100 flex flex-col h-screen overflow-hidden select-none">
 
   <!-- Header -->
   <header class="h-14 border-b border-slate-800 bg-[#111827] px-6 flex items-center justify-between shrink-0">
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">☸</div>
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">DH</div>
       <div>
         <h1 class="text-sm font-bold text-white tracking-wide">Dhamma Studio</h1>
-        <p class="text-[10px] text-slate-400">4-Line Punctuation Splitting • Live Background Sync</p>
+        <p class="text-[10px] text-slate-400">Excel Multi-Language Sync • Live Canvas</p>
       </div>
     </div>
 
-    <!-- Format Switcher & Progress Bar -->
     <div class="flex items-center gap-4">
       <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-        <button id="btn-fmt-landscape" onclick="switchVideoFormat('landscape')" class="px-3 py-1 rounded bg-indigo-600 font-semibold text-white">16:9 Landscape</button>
-        <button id="btn-fmt-mobile" onclick="switchVideoFormat('mobile')" class="px-3 py-1 rounded text-slate-400 hover:text-white">9:16 Mobile Shorts</button>
+        <button id="btn-fmt-landscape" onclick="switchVideoFormat('landscape')" class="px-3 py-1 rounded bg-indigo-600 font-semibold text-white">YouTube (16:9)</button>
+        <button id="btn-fmt-mobile" onclick="switchVideoFormat('mobile')" class="px-3 py-1 rounded text-slate-400 hover:text-white">Mobile Shorts (9:16)</button>
       </div>
 
       <div class="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-full w-80">
@@ -58,62 +63,73 @@
   <!-- Workspace -->
   <main class="flex-1 flex overflow-hidden p-4 gap-4">
 
-    <!-- LEFT: Viewport & Visual Toolbar -->
+    <!-- LEFT: Viewport & Toolbar -->
     <section class="flex-[1.15] flex flex-col gap-3">
       
       <!-- Video Viewport -->
       <div class="flex-1 bg-black rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-2xl p-2">
         <div id="video-viewport" class="viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950">
           
-          <!-- Blurred Background for Mobile View -->
           <img id="canvas-bg-blur" class="absolute inset-0 w-full h-full object-cover filter blur-md brightness-50 z-0 hidden" alt="Blurred BG">
           
-          <!-- Center Banner Frame (Only for Mobile 9:16) -->
-          <div id="mobile-center-banner" class="absolute inset-x-0 h-48 border-y border-white/20 overflow-hidden z-10 hidden flex items-center justify-center">
+          <div id="mobile-center-banner" class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[52%] border-y border-white/20 overflow-hidden z-10 hidden flex items-center justify-center">
             <img id="canvas-bg-center" class="w-full h-full object-cover" alt="Sharp Banner">
             <div class="absolute inset-0 bg-black/25"></div>
           </div>
 
-          <!-- Standard Landscape Background -->
           <img id="canvas-bg" class="absolute inset-0 w-full h-full object-cover z-0 hidden" alt="Background">
           <div id="canvas-dimmer" class="absolute inset-0 bg-[#00000073] z-10 transition-colors pointer-events-none"></div>
-          <img id="logo-preview" class="absolute top-4 right-5 w-10 h-10 object-contain z-30 hidden" alt="Logo">
+          <img id="logo-preview" class="absolute top-4 right-5 w-16 h-16 object-contain z-30 hidden" alt="Logo">
           
-          <!-- Live Caption (1:1 with Render Output) -->
-          <div id="canvas-text" 
-               contenteditable="true" 
-               oninput="syncCanvasToMemory()" 
-               class="font-mm text-stroke z-30 text-center text-white leading-relaxed font-semibold tracking-wide drop-shadow-lg outline-none cursor-text select-text whitespace-pre-line px-6">
-            (တင်သွင်းထားသော တရားတော်စာသား ဤနေရာတွင် ပေါ်ပါမည်)
+          <div class="relative z-30 group flex flex-col items-center justify-center w-full px-6">
+            <div id="canvas-text" 
+                 contenteditable="true" 
+                 oninput="syncCanvasToMemory()" 
+                 class="font-mm text-stroke text-center text-white leading-relaxed font-semibold tracking-wide drop-shadow-lg outline-none cursor-text select-text whitespace-pre-line w-[88%] max-w-[88%] mx-auto break-words">
+              (Subtitle text will appear here)
+            </div>
+
+            <div id="canvas-original-tooltip" 
+                 class="absolute bottom-[-45px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none bg-slate-950/95 border border-indigo-500/60 text-amber-300 text-xs px-3.5 py-1.5 rounded-lg shadow-2xl max-w-[85%] truncate font-mm z-50">
+              Original: -
+            </div>
           </div>
+
         </div>
       </div>
 
-      <!-- In-Canvas Word Styler Toolbar -->
+      <!-- Word Styler Toolbar -->
       <div class="bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-xs">
-        <div class="flex items-center gap-3">
-          <span class="text-[11px] font-bold text-indigo-400 uppercase">Word Styler:</span>
-          <button onclick="applyBoxStyle()" class="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-md font-semibold">Highlight Box</button>
-          <input type="color" id="tool-box-bg" value="#8c4e12" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
-          <input type="color" id="tool-box-bc" value="#ffffff" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold text-indigo-400 uppercase">Style:</span>
+          
+          <button onmousedown="event.preventDefault()" onclick="applyBoxStyle()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded font-semibold flex items-center gap-1 shadow">
+            <span>Box Color</span>
+          </button>
+          <input type="color" id="tool-box-bg" value="#8c4e12" title="Box Background" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+          <input type="color" id="tool-box-bc" value="#ffffff" title="Box Border" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
 
-          <div class="h-4 w-px bg-slate-800"></div>
+          <div class="h-4 w-px bg-slate-700 mx-1"></div>
 
-          <button onclick="applyOutlineStyle()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-semibold">Outline</button>
-          <input type="color" id="tool-outline-c" value="#000000" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+          <button onmousedown="event.preventDefault()" onclick="applyOutlineStyle()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded font-semibold">
+            Outline
+          </button>
+          <input type="color" id="tool-outline-c" value="#000000" title="Outline Color" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
 
-          <button onclick="clearSelectedStyle()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-md">✕ Clear</button>
+          <button onmousedown="event.preventDefault()" onclick="clearSelectedStyle()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded border border-slate-700">
+            Clear Style
+          </button>
         </div>
 
-        <div class="flex items-center gap-3">
-          <label class="text-slate-400 text-[11px]">Font Size:</label>
-          <input type="number" id="gen-font-size" value="48" min="20" max="72" onchange="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center text-xs">
+        <div class="flex items-center gap-2.5">
+          <label class="text-slate-400 text-[11px]">Size:</label>
+          <input type="number" id="gen-font-size" value="44" min="16" max="90" oninput="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs">
           
-          <label class="text-slate-400 text-[11px]">Spacing:</label>
-          <input type="number" id="gen-line-spacing" value="26" min="10" max="60" onchange="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center text-xs">
+          <label class="text-slate-400 text-[11px]">Space:</label>
+          <input type="number" id="gen-line-spacing" value="26" min="6" max="70" oninput="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs">
           
-          <label class="text-slate-400 text-[11px]">Dimmer:</label>
-          <input type="range" id="gen-opacity" min="0" max="90" value="45" oninput="adjustDimmer(this.value)" class="w-16">
+          <label class="text-slate-400 text-[11px]">Dim:</label>
+          <input type="range" id="gen-opacity" min="0" max="90" value="45" oninput="adjustDimmer(this.value)" class="w-14">
         </div>
       </div>
 
@@ -121,84 +137,95 @@
       <div class="bg-slate-900/80 border border-slate-800 p-3 rounded-xl flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <button id="btn-play" onclick="togglePlay()" class="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition">
-            ▶ Play (Space)
+            Play (Space)
           </button>
           <span id="clock" class="font-mono text-sm text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-md">
-            00:00.00
+            0.00s
           </span>
         </div>
         <audio id="audio-elem" class="hidden"></audio>
-        <button onclick="stampNext()" class="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition">
-          ↵ Split & Stamp Next (Enter)
-        </button>
       </div>
 
     </section>
 
-    <!-- RIGHT: Timeline Chunks, Inline Editors & Delete Action -->
+    <!-- RIGHT: Timeline Chunks & Setup Panel -->
     <section class="flex-1 flex flex-col gap-3 overflow-hidden">
       
       <!-- Upload Card -->
       <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex flex-col gap-2.5 shrink-0">
+        
         <div class="grid grid-cols-3 gap-2">
           <input type="file" id="input-audio" accept="audio/*" class="hidden" onchange="onFileChosen('audio')">
           <button onclick="document.getElementById('input-audio').click()" id="btn-audio-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
-            🎵 1. Audio (.mp3)
+            1. Audio (.mp3)
           </button>
 
-          <input type="file" id="input-text" accept=".txt" class="hidden" onchange="onFileChosen('text')">
-          <button onclick="document.getElementById('input-text').click()" id="btn-text-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
-            📝 2. Text (.txt)
+          <input type="file" id="input-excel" accept=".xlsx,.xls" class="hidden" onchange="onFileChosen('excel')">
+          <button onclick="document.getElementById('input-excel').click()" id="btn-excel-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            2. Excel (.xlsx)
           </button>
 
           <input type="file" id="input-logo" accept="image/*" class="hidden" onchange="onFileChosen('logo')">
           <button onclick="document.getElementById('input-logo').click()" id="btn-logo-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
-            🏷️ 3. Logo (Opt)
+            3. Logo (Opt)
           </button>
         </div>
 
-        <div class="flex gap-2">
+        <div class="flex items-center gap-2">
           <input type="file" id="input-folder" webkitdirectory directory multiple class="hidden" onchange="uploadImageFolder()">
           <button onclick="document.getElementById('input-folder').click()" id="btn-folder-choose" class="flex-1 bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg text-slate-200 border border-slate-700 truncate">
-            📁 Upload Images Folder
+            Images Folder
           </button>
-          <button onclick="uploadAndSync()" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-4 py-2 rounded-lg text-white font-semibold">⚡ Auto-Segment</button>
+
+          <button id="btn-sync-action" onclick="handleSyncAction()" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-5 py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 shrink-0">
+            Load & Auto-Match
+          </button>
         </div>
       </div>
 
       <!-- Segment Timeline List -->
       <div class="flex-1 bg-slate-900/40 border border-slate-800 rounded-xl flex flex-col overflow-hidden p-3">
-        <div class="flex justify-between items-center mb-2 px-1">
+        
+        <div class="flex justify-between items-center mb-2.5 px-1 gap-2 flex-wrap">
           <div class="flex items-center gap-2">
             <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Segments</span>
             <span id="segment-count" class="text-xs text-indigo-400 font-mono">0 Chunks</span>
+
+            <button id="btn-match-images" onclick="triggerImageMatching()" class="bg-slate-800 hover:bg-indigo-600/80 border border-slate-700 hover:border-indigo-500 text-[10px] px-2.5 py-1 rounded-md text-slate-300 hover:text-white transition flex items-center gap-1 font-semibold">
+              Re-Match Images
+            </button>
           </div>
 
-          <!-- Shift Shifter -->
+          <!-- Dynamic Language Selector -->
           <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
-            <span class="text-[10px] text-slate-400">Shift All:</span>
-            <button onclick="shiftAllTimestamps(-1.0)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-amber-400">-1s</button>
-            <button onclick="shiftAllTimestamps(-0.5)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-amber-400">-0.5s</button>
-            <button onclick="shiftAllTimestamps(0.5)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-emerald-400">+0.5s</button>
-            <button onclick="shiftAllTimestamps(1.0)" class="bg-slate-800 hover:bg-slate-700 text-[10px] px-1.5 py-0.5 rounded text-emerald-400">+1s</button>
-            <button onclick="shiftAllTimestamps(4.0)" class="bg-indigo-600 hover:bg-indigo-500 text-[10px] px-2 py-0.5 rounded text-white font-bold" title="Chunk 1 မှစ၍ ၄ စက္ကန့် နောက်ဆုတ်မည်">+4s Delay</button>
+            <span class="text-[10px] text-slate-400">Lang:</span>
+            <select id="select-target-lang" onchange="triggerTimelineTranslation()" class="bg-transparent text-xs text-indigo-400 font-semibold focus:outline-none cursor-pointer max-w-[170px] truncate">
+              <option value="" class="bg-slate-900 text-slate-500">No Excel Loaded</option>
+            </select>
           </div>
         </div>
-        <div id="segment-list" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+
+        <div id="segment-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1"></div>
       </div>
 
-      <!-- Render Action Button with BGM Checkbox -->
+      <!-- Render Action Button & Quality Selector -->
       <div class="flex items-center gap-3 shrink-0">
         <label class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-slate-800/80 transition text-xs shrink-0 select-none">
           <input type="checkbox" id="check-enable-bgm" checked class="w-4 h-4 rounded accent-indigo-600 cursor-pointer">
-          <span class="text-slate-200 font-medium">🎵 Intro BGM</span>
+          <span class="text-slate-200 font-medium">BGM</span>
         </label>
 
-        <button onclick="startRender()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30">
-          🎬 Render Complete Video (FFmpeg)
+        <select id="select-quality" class="bg-slate-900/80 border border-slate-800 text-xs text-indigo-300 font-semibold px-3 py-2.5 rounded-xl focus:outline-none">
+          <option value="720p" selected>720p (Fast Balanced)</option>
+          <option value="1080p">1080p (Full HD)</option>
+          <option value="540p">540p (Rapid Preview)</option>
+        </select>
+
+        <button id="btn-render" onclick="startRender()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30">
+          Render Video
         </button>
         <button id="btn-download" onclick="downloadVideo()" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-xl font-bold text-xs text-white hidden">
-          ⬇ Download Video
+          Download Video
         </button>
       </div>
 
@@ -210,30 +237,78 @@
     let rows = [];
     let currentIndex = 0;
     let currentFormat = "landscape";
+    let isEditing = false;
+    let saveDebounceTimer = null;
+
     const audioElem = document.getElementById('audio-elem');
+    const canvasTextEl = document.getElementById('canvas-text');
+    const tooltipEl = document.getElementById('canvas-original-tooltip');
+
+    canvasTextEl.addEventListener('focus', () => { isEditing = true; });
+    canvasTextEl.addEventListener('blur', () => { 
+      isEditing = false; 
+      syncCanvasToMemory(); 
+    });
 
     setInterval(async () => {
       try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Status request failed: ${res.status}`);
         const data = await res.json();
         document.getElementById('progress-bar').style.width = `${data.pct}%`;
         document.getElementById('progress-text').innerText = `${data.pct}% - ${data.msg}`;
-        if (data.pct === 100 && !data.is_rendering && rows.length > 0) {
-          const dlBtn = document.getElementById('btn-download');
-          if (dlBtn && dlBtn.classList.contains('hidden')) {
+        const renderBtn = document.getElementById('btn-render');
+        if (renderBtn) {
+          renderBtn.disabled = data.is_rendering;
+          renderBtn.classList.toggle('opacity-60', data.is_rendering);
+          renderBtn.classList.toggle('cursor-not-allowed', data.is_rendering);
+          renderBtn.innerText = data.is_rendering ? data.msg : 'Render Video';
+        }
+        const dlBtn = document.getElementById('btn-download');
+        if (dlBtn) {
+          if (data.pct === 100 && !data.is_rendering && data.has_video) {
             dlBtn.classList.remove('hidden');
+          } else if (data.is_rendering) {
+            dlBtn.classList.add('hidden');
           }
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn('Status polling failed:', err.message);
+      }
     }, 1000);
 
-    function switchVideoFormat(fmt) {
+    function updateLanguageDropdown(languages) {
+      const select = document.getElementById('select-target-lang');
+      select.innerHTML = "";
+
+      if (!languages || languages.length === 0) {
+        select.innerHTML = `<option value="" class="bg-slate-900 text-slate-400">None</option>`;
+        return;
+      }
+
+      languages.forEach(lang => {
+        const opt = document.createElement('option');
+        opt.value = lang.code;
+        opt.className = "bg-slate-900 text-white";
+        opt.innerText = lang.label;
+        if (lang.code === 'my') {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+    }
+
+    function formatTimeSeconds(sec) {
+      if (isNaN(sec) || sec < 0) return "0.00";
+      return parseFloat(sec).toFixed(2);
+    }
+
+    async function switchVideoFormat(fmt) {
       currentFormat = fmt;
       const viewport = document.getElementById('video-viewport');
       const btnLand = document.getElementById('btn-fmt-landscape');
       const btnMob = document.getElementById('btn-fmt-mobile');
       const fontIn = document.getElementById('gen-font-size');
-      const spaceIn = document.getElementById('gen-line-spacing');
       const bgBlur = document.getElementById('canvas-bg-blur');
       const centerBanner = document.getElementById('mobile-center-banner');
       const standardBg = document.getElementById('canvas-bg');
@@ -242,8 +317,7 @@
         viewport.className = "viewport-mobile relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950";
         btnMob.className = "px-3 py-1 rounded bg-indigo-600 font-semibold text-white";
         btnLand.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
-        fontIn.value = 40;
-        spaceIn.value = 22;
+        fontIn.value = 38;
 
         standardBg.classList.add('hidden');
         bgBlur.classList.remove('hidden');
@@ -252,22 +326,40 @@
         viewport.className = "viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950";
         btnLand.className = "px-3 py-1 rounded bg-indigo-600 font-semibold text-white";
         btnMob.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
-        fontIn.value = 48;
-        spaceIn.value = 26;
+        fontIn.value = 44;
 
         bgBlur.classList.add('hidden');
         centerBanner.classList.add('hidden');
         standardBg.classList.remove('hidden');
       }
       adjustFontSettings();
-      if (rows.length > 0) selectSegment(currentIndex);
+
+      if (rows.length > 0) {
+        try {
+          const res = await fetch('/api/switch_format', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ format: currentFormat })
+          });
+          const data = await res.json();
+          if (data.success && data.reloaded) {
+            rows = data.rows;
+            if (data.languages) updateLanguageDropdown(data.languages);
+            document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+            renderTimeline();
+            currentIndex = 0;
+          }
+        } catch(e) {}
+      }
+
+      if (rows.length > 0) selectSegment(currentIndex, false);
     }
 
     function onFileChosen(type) {
       const input = document.getElementById(`input-${type}`);
       const btn = document.getElementById(`btn-${type}-choose`);
       if (input.files[0]) {
-        btn.innerText = `✓ ${input.files[0].name}`;
+        btn.innerText = `OK: ${input.files[0].name}`;
         btn.classList.add('border-emerald-600', 'text-emerald-400');
       }
     }
@@ -278,7 +370,7 @@
       if (!files || files.length === 0) return;
 
       const btn = document.getElementById('btn-folder-choose');
-      btn.innerText = `⏳ Uploading ${files.length} images...`;
+      btn.innerText = `Uploading ${files.length} images...`;
 
       const formData = new FormData();
       for (let i = 0; i < files.length; i++) {
@@ -288,188 +380,300 @@
       const res = await fetch('/api/upload_images_folder', { method: 'POST', body: formData });
       const data = await res.json();
       if (data.success) {
-        btn.innerText = `✓ ${data.count} Images Uploaded`;
+        btn.innerText = `${data.count} Images Ready`;
         btn.classList.add('border-emerald-600', 'text-emerald-400');
+        
+        if (data.rows && data.rows.length > 0) {
+          rows = data.rows;
+          renderTimeline();
+          selectSegment(currentIndex, false);
+        } else if (rows.length > 0) {
+          await triggerImageMatching();
+        }
       }
     }
 
-    async function uploadAndSync() {
-      const audioInput = document.getElementById('input-audio');
-      const textInput = document.getElementById('input-text');
-      const logoInput = document.getElementById('input-logo');
+    async function triggerImageMatching() {
+      if (!rows || rows.length === 0) return;
+      const matchBtn = document.getElementById('btn-match-images');
+      matchBtn.disabled = true;
+      matchBtn.innerText = "Matching...";
 
-      if (!audioInput.files || !audioInput.files[0] || !textInput.files || !textInput.files[0]) {
-        alert("Audio (.mp3) နှင့် Text (.txt) ဖိုင် နှစ်ခုလုံးကို အရင်ရွေးချယ်ပေးပါ။");
+      try {
+        const res = await fetch('/api/match_images', { method: 'POST' });
+        if (!res.ok) throw new Error(`Matching failed: ${res.status}`);
+        const data = await res.json();
+        if (data.success && data.rows) {
+          rows = data.rows;
+          renderTimeline();
+          selectSegment(currentIndex, false);
+          matchBtn.innerText = "Matched";
+          matchBtn.classList.add('border-emerald-600', 'text-emerald-400');
+        } else {
+          matchBtn.innerText = "Re-Match Images";
+        }
+      } catch (e) {
+        matchBtn.innerText = "Re-Match Images";
+      } finally {
+        matchBtn.disabled = false;
+      }
+    }
+
+    async function handleSyncAction() {
+      const audioInput = document.getElementById('input-audio');
+      const excelInput = document.getElementById('input-excel');
+      const logoInput = document.getElementById('input-logo');
+      const actionBtn = document.getElementById('btn-sync-action');
+
+      if (!audioInput.files || !audioInput.files[0]) {
+        alert("Please choose an audio (.mp3) file.");
+        return;
+      }
+      if (!excelInput.files || !excelInput.files[0]) {
+        alert("Please choose an excel (.xlsx) file.");
         return;
       }
 
       const formData = new FormData();
       formData.append('audio', audioInput.files[0]);
-      formData.append('text', textInput.files[0]);
+      formData.append('excel', excelInput.files[0]);
+      formData.append('format', currentFormat);
       if (logoInput.files && logoInput.files[0]) {
         formData.append('logo', logoInput.files[0]);
       }
 
-      const res = await fetch('/api/upload_assets', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.success) {
-        rows = data.rows;
-        audioElem.src = data.audio_url;
-        document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+      actionBtn.disabled = true;
+      actionBtn.innerHTML = `Loading Excel & Auto-Matching...`;
 
-        if (data.has_logo) {
-          const logoEl = document.getElementById('logo-preview');
-          logoEl.src = '/api/get_logo';
-          logoEl.classList.remove('hidden');
+      try {
+        const res = await fetch('/api/upload_excel_sync', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+          rows = data.rows;
+          audioElem.src = data.audio_url;
+          document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+
+          if (data.languages) {
+            updateLanguageDropdown(data.languages);
+          }
+
+          if (data.has_logo) {
+            const logoEl = document.getElementById('logo-preview');
+            logoEl.src = '/api/get_logo';
+            logoEl.classList.remove('hidden');
+          }
+
+          renderTimeline();
+          selectSegment(0, false);
+
+          const hasDifferentImages = new Set(rows.map(r => r.matched_img)).size > 1;
+          if (!hasDifferentImages) {
+            await triggerImageMatching();
+          }
+        } else {
+          alert(data.error);
         }
-
-        renderTimeline();
-        selectSegment(0);
-      } else {
-        alert(data.error);
+      } catch (err) {
+        alert("Upload error: " + err);
+      } finally {
+        actionBtn.disabled = false;
+        actionBtn.innerHTML = "Load & Auto-Match";
       }
     }
 
-    async function shiftAllTimestamps(offsetSec) {
+    async function triggerTimelineTranslation() {
       if (!rows || rows.length === 0) return;
-      const res = await fetch('/api/shift_all_timestamps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offset_sec: offsetSec })
-      });
-      const data = await res.json();
-      if (data.success) {
-        rows = data.rows;
-        renderTimeline();
-        selectSegment(currentIndex);
+      const targetLang = document.getElementById('select-target-lang').value;
+
+      try {
+        const res = await fetch('/api/translate_timeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_lang: targetLang })
+        });
+        const data = await res.json();
+        if (data.success) {
+          rows = data.rows;
+          renderTimeline();
+          selectSegment(currentIndex, false);
+        }
+      } catch (err) {
+        alert("Language switch error: " + err);
       }
     }
 
-    async function insertNewRow(afterIdx, event) {
-      event.stopPropagation();
-      const res = await fetch('/api/insert_row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ after_index: afterIdx })
-      });
-      const data = await res.json();
-      if (data.success) {
-        rows = data.rows;
-        document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
-        renderTimeline();
-        selectSegment(data.inserted_index);
-      }
+    function applyBoxStyle() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const text = selection.toString();
+      if (!text.trim()) return;
+
+      const bg = document.getElementById('tool-box-bg').value;
+      const bc = document.getElementById('tool-box-bc').value;
+
+      const span = document.createElement('span');
+      span.setAttribute('data-style', 'box');
+      span.setAttribute('data-bg', bg);
+      span.setAttribute('data-bc', bc);
+      span.style.backgroundColor = bg;
+      span.style.border = `2px solid ${bc}`;
+      span.style.padding = '2px 8px';
+      span.style.borderRadius = '4px';
+      span.style.display = 'inline-block';
+      span.textContent = text;
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      selection.removeAllRanges();
+      syncCanvasToMemory();
     }
 
-    async function deleteSegment(idx, event) {
-      event.stopPropagation();
-      if (!confirm(`Segment #${idx + 1} ကို ဖျက်ရန် သေချာပါသလား?`)) return;
+    function applyOutlineStyle() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const text = selection.toString();
+      if (!text.trim()) return;
 
-      const res = await fetch('/api/delete_row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index: idx })
-      });
-      const data = await res.json();
-      if (data.success) {
-        rows = data.rows;
-        document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
-        if (currentIndex >= rows.length) currentIndex = Math.max(0, rows.length - 1);
-        renderTimeline();
-        if (rows.length > 0) selectSegment(currentIndex);
-      }
+      const c = document.getElementById('tool-outline-c').value;
+      const span = document.createElement('span');
+      span.setAttribute('data-style', 'outline');
+      span.setAttribute('data-c', c);
+      span.style.textShadow = `-2px -2px 0 ${c}, 2px -2px 0 ${c}, -2px 2px 0 ${c}, 2px 2px 0 ${c}`;
+      span.textContent = text;
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      selection.removeAllRanges();
+      syncCanvasToMemory();
     }
 
-    async function updateSegmentTime(idx, field, val) {
-      const num = parseFloat(val);
-      if (isNaN(num)) return;
-      rows[idx][field] = num;
-      rows[idx].duration = Math.round(Math.max(0, rows[idx].end_time - rows[idx].start_time) * 100) / 100;
-      
-      await fetch('/api/update_row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rows[idx])
-      });
+    function clearSelectedStyle() {
+      canvasTextEl.innerHTML = canvasTextEl.innerText;
+      syncCanvasToMemory();
     }
 
     function renderTimeline() {
       const container = document.getElementById('segment-list');
       container.innerHTML = "";
       rows.forEach((r, idx) => {
-        const wrapDiv = document.createElement('div');
-        wrapDiv.className = "flex flex-col";
-
         const item = document.createElement('div');
-        item.className = `p-2.5 rounded-lg border text-xs cursor-pointer transition flex items-center justify-between gap-2.5 ${
-          idx === currentIndex ? 'bg-indigo-950/80 border-indigo-500 shadow-md' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+        item.className = `p-2 rounded-lg border text-xs transition flex items-center gap-2 ${
+          idx === currentIndex ? 'bg-indigo-950/90 border-indigo-500 shadow-md ring-1 ring-indigo-500/50' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
         }`;
-        item.onclick = () => selectSegment(idx);
 
-        const cleanTxt = r.caption.replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
+        const caption = document.createElement('div');
+        caption.className = 'flex-1 min-w-0 cursor-pointer';
+        caption.onclick = () => selectSegment(idx, true);
+        const title = document.createElement('div');
+        title.className = 'truncate font-mm text-slate-200';
+        title.textContent = (r.caption || '').replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
+        caption.innerHTML = `<div class="font-mono text-[10px] text-indigo-400 font-bold mb-1">#${idx + 1}</div>`;
+        caption.appendChild(title);
 
-        item.innerHTML = `
-          <span class="font-mono text-[10px] text-indigo-400 font-bold w-5 shrink-0">#${idx + 1}</span>
-          <div class="flex-1 truncate font-mm text-slate-200">${cleanTxt}</div>
-          
-          <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
-            <input type="number" step="0.1" value="${r.start_time}" 
-              onchange="updateSegmentTime(${idx}, 'start_time', this.value)"
-              class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 font-mono text-[11px] text-emerald-400 text-center focus:border-indigo-500 outline-none">
-            <span class="text-slate-600">-</span>
-            <input type="number" step="0.1" value="${r.end_time}" 
-              onchange="updateSegmentTime(${idx}, 'end_time', this.value)"
-              class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 font-mono text-[11px] text-amber-400 text-center focus:border-indigo-500 outline-none">
-          </div>
-
-          <button onclick="deleteSegment(${idx}, event)" class="text-slate-500 hover:text-red-400 p-1 transition shrink-0" title="Delete Segment">
-            🗑️
-          </button>
+        const controls = document.createElement('div');
+        controls.className = 'flex items-center gap-1 shrink-0';
+        controls.innerHTML = `
+          <input class="segment-start w-16 bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-emerald-300" type="number" min="0" step="0.01" value="${Number(r.start_time || 0)}" title="Start time">
+          <span class="text-slate-500">-</span>
+          <input class="segment-end w-16 bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-amber-300" type="number" min="0" step="0.01" value="${Number(r.end_time || 0)}" title="End time">
+          <button class="save-segment bg-emerald-700 hover:bg-emerald-600 rounded px-2 py-1 text-[10px]">Save</button>
+          <button class="delete-segment bg-red-700 hover:bg-red-600 rounded px-2 py-1 text-[10px]">Delete</button>
         `;
-        wrapDiv.appendChild(item);
 
-        const divider = document.createElement('div');
-        divider.className = "relative flex items-center justify-center h-4 group cursor-pointer my-0.5";
-        divider.title = "Insert New Split Row Here";
-        divider.innerHTML = `
-          <div class="w-full h-px bg-transparent group-hover:bg-indigo-500/50 transition"></div>
-          <button onclick="insertNewRow(${idx}, event)" 
-                  class="absolute opacity-0 group-hover:opacity-100 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow-lg transition transform group-hover:scale-110">
-            +
-          </button>
-        `;
-        wrapDiv.appendChild(divider);
+        controls.querySelector('.save-segment').onclick = async (e) => {
+          e.stopPropagation();
+          const startTime = Number(controls.querySelector('.segment-start').value);
+          const endTime = Number(controls.querySelector('.segment-end').value);
+          if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime < 0 || endTime <= startTime) {
+            alert('Invalid time. End time must be greater than start time.');
+            return;
+          }
+          try {
+            const res = await fetch('/api/update_row', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({index: idx, start_time: startTime, end_time: endTime, caption: r.caption}) });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Update failed');
+            rows[idx] = data.row;
+            renderTimeline();
+            selectSegment(Math.min(currentIndex, rows.length - 1), false);
+          } catch (err) { alert(err.message); }
+        };
 
-        container.appendChild(wrapDiv);
+        controls.querySelector('.delete-segment').onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete statement #${idx + 1}?`)) return;
+          try {
+            const res = await fetch('/api/delete_row', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({index: idx}) });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed');
+            rows = data.rows || rows.filter((_, i) => i !== idx);
+            currentIndex = Math.max(0, Math.min(currentIndex, rows.length - 1));
+            document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+            renderTimeline();
+            if (rows.length) selectSegment(currentIndex, false);
+            else canvasTextEl.innerHTML = '';
+          } catch (err) { alert(err.message); }
+        };
+
+        item.appendChild(caption);
+        item.appendChild(controls);
+        container.appendChild(item);
       });
     }
 
     function adjustFontSettings() {
-      const sz = parseInt(document.getElementById('gen-font-size').value) || 48;
+      const sz = parseInt(document.getElementById('gen-font-size').value) || 44;
       const sp = parseInt(document.getElementById('gen-line-spacing').value) || 26;
       const el = document.getElementById('canvas-text');
 
       if (currentFormat === 'mobile') {
-        const previewSz = Math.max(11, Math.round(sz * 0.28));
-        const previewSp = Math.max(4, Math.round(sp * 0.28));
+        const previewSz = Math.max(12, Math.round(sz * 0.38));
+        const previewSp = Math.max(4, Math.round(sp * 0.38));
         el.style.fontSize = `${previewSz}px`;
-        el.style.lineHeight = `${previewSz + previewSp + 4}px`;
-        el.style.maxWidth = '250px';
+        el.style.lineHeight = `${previewSz + previewSp}px`;
+        el.style.maxWidth = '260px';
       } else {
-        el.style.fontSize = '24px';
-        el.style.lineHeight = '38px';
-        el.style.maxWidth = '90%';
+        const previewSz = Math.max(14, Math.round(sz * 0.5));
+        const previewSp = Math.max(6, Math.round(sp * 0.5));
+        el.style.fontSize = `${previewSz}px`;
+        el.style.lineHeight = `${previewSz + previewSp}px`;
+        el.style.maxWidth = '88%';
       }
     }
 
-    function selectSegment(idx) {
+    function selectSegment(idx, triggerPlay = false) {
       if (!rows || rows.length === 0) return;
       currentIndex = idx;
       renderTimeline();
       const r = rows[idx];
-      const canvasText = document.getElementById('canvas-text');
-      canvasText.innerText = r.caption;
-      audioElem.currentTime = r.start_time;
+
+      if (!isEditing) {
+        // Gentle fade-out, content swap, then fade-in.
+        canvasTextEl.classList.remove('caption-fade-in');
+        canvasTextEl.classList.add('caption-fade-out');
+        window.clearTimeout(window.__captionFadeTimer);
+        window.__captionFadeTimer = window.setTimeout(() => {
+          canvasTextEl.innerHTML = r.caption || "";
+          adjustFontSettings();
+          canvasTextEl.classList.remove('caption-fade-out');
+          canvasTextEl.classList.add('caption-fade-in');
+        }, 260);
+      }
+
+      if (tooltipEl) {
+        tooltipEl.innerText = `Original: ${r.original_text || '-'}`;
+      }
+      
+      if (audioElem.src && !isNaN(r.start_time)) {
+        audioElem.currentTime = r.start_time;
+        if (triggerPlay) {
+          audioElem.play();
+          const btn = document.getElementById('btn-play');
+          btn.innerText = "Pause";
+          btn.className = "px-5 py-2 rounded-lg bg-amber-600 text-white font-semibold text-xs";
+        }
+      }
 
       const canvasBg = document.getElementById('canvas-bg');
       const canvasBgBlur = document.getElementById('canvas-bg-blur');
@@ -500,63 +704,26 @@
 
     function syncCanvasToMemory() {
       if (!rows[currentIndex]) return;
-      rows[currentIndex].caption = document.getElementById('canvas-text').innerText;
-      fetch('/api/update_row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rows[currentIndex])
-      });
-    }
+      const content = canvasTextEl.innerHTML;
+      // Keep manual edits (including deleted punctuation) in the client rows.
+      rows[currentIndex].caption = content;
+      
+      const cleanTxt = content.replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
+      const listItems = document.querySelectorAll('#segment-list .font-mm');
+      if (listItems[currentIndex]) {
+        listItems[currentIndex].innerText = cleanTxt;
+      }
 
-    function applyBoxStyle() {
-      const selection = window.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      const text = selection.toString();
-      if (!text.trim()) return;
-
-      const bg = document.getElementById('tool-box-bg').value;
-      const bc = document.getElementById('tool-box-bc').value;
-
-      const span = document.createElement('span');
-      span.setAttribute('data-style', 'box');
-      span.setAttribute('data-bg', bg);
-      span.setAttribute('data-bc', bc);
-      span.style.backgroundColor = bg;
-      span.style.border = `2px solid ${bc}`;
-      span.style.padding = '2px 8px';
-      span.style.borderRadius = '4px';
-      span.textContent = text;
-
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(span);
-      syncCanvasToMemory();
-    }
-
-    function applyOutlineStyle() {
-      const selection = window.getSelection();
-      if (!selection || !selection.rangeCount) return;
-      const text = selection.toString();
-      if (!text.trim()) return;
-
-      const c = document.getElementById('tool-outline-c').value;
-      const span = document.createElement('span');
-      span.setAttribute('data-style', 'outline');
-      span.setAttribute('data-w', '4');
-      span.setAttribute('data-c', c);
-      span.style.textShadow = `-2px -2px 0 ${c}, 2px -2px 0 ${c}, -2px 2px 0 ${c}, 2px 2px 0 ${c}`;
-      span.textContent = text;
-
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(span);
-      syncCanvasToMemory();
-    }
-
-    function clearSelectedStyle() {
-      const el = document.getElementById('canvas-text');
-      el.innerHTML = el.innerText;
-      syncCanvasToMemory();
+      clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = setTimeout(async () => {
+        try {
+          await fetch('/api/update_row', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rows[currentIndex])
+          });
+        } catch(e) {}
+      }, 400);
     }
 
     function adjustDimmer(val) {
@@ -567,54 +734,58 @@
       const btn = document.getElementById('btn-play');
       if (audioElem.paused) {
         audioElem.play();
-        btn.innerText = "⏸ Pause";
+        btn.innerText = "Pause";
         btn.className = "px-5 py-2 rounded-lg bg-amber-600 text-white font-semibold text-xs";
       } else {
         audioElem.pause();
-        btn.innerText = "▶ Play (Space)";
+        btn.innerText = "Play (Space)";
         btn.className = "px-5 py-2 rounded-lg bg-emerald-600 text-white font-semibold text-xs";
       }
     }
 
     audioElem.ontimeupdate = () => {
       const sec = audioElem.currentTime;
-      const mins = Math.floor(sec / 60);
-      const rem = (sec % 60).toFixed(2);
-      document.getElementById('clock').innerText = `${String(mins).padStart(2, '0')}:${String(rem).padStart(5, '0')}`;
+      document.getElementById('clock').innerText = `${formatTimeSeconds(sec)}s`;
 
-      if (rows[currentIndex] && sec >= rows[currentIndex].end_time && currentIndex < rows.length - 1) {
-        selectSegment(currentIndex + 1);
+      if (rows[currentIndex]) {
+        if (!isEditing && sec >= rows[currentIndex].end_time && currentIndex < rows.length - 1) {
+          selectSegment(currentIndex + 1, false);
+        }
       }
     };
 
-    async function stampNext() {
-      if (!rows[currentIndex]) return;
-      const cur = audioElem.currentTime;
-      rows[currentIndex].end_time = parseFloat(cur.toFixed(2));
-      
-      await fetch('/api/update_row', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rows[currentIndex])
-      });
-
-      if (currentIndex < rows.length - 1) {
-        rows[currentIndex + 1].start_time = parseFloat(cur.toFixed(2));
-        selectSegment(currentIndex + 1);
-      }
-    }
-
     async function startRender() {
+      const renderBtn = document.getElementById('btn-render');
+      if (renderBtn?.disabled) return;
+      const dlBtn = document.getElementById('btn-download');
+      if (dlBtn) dlBtn.classList.add('hidden');
+      if (renderBtn) {
+        renderBtn.disabled = true;
+        renderBtn.innerText = 'Starting render...';
+      }
+
+      syncCanvasToMemory();
+
+      const qualityVal = document.getElementById('select-quality')?.value || "720p";
       const formData = new FormData();
       formData.append('format', currentFormat);
+      formData.append('quality', qualityVal);
       formData.append('font_size', document.getElementById('gen-font-size').value);
       formData.append('line_spacing', document.getElementById('gen-line-spacing').value);
       formData.append('opacity', document.getElementById('gen-opacity').value);
       formData.append('enable_bgm', document.getElementById('check-enable-bgm').checked);
+      formData.append('target_lang', document.getElementById('select-target-lang')?.value || '');
+      formData.append('rows_json', JSON.stringify(rows));
 
       const res = await fetch('/api/start_render', { method: 'POST', body: formData });
       const data = await res.json();
-      if (!data.success) alert(data.error);
+      if (!data.success) {
+        if (renderBtn) {
+          renderBtn.disabled = false;
+          renderBtn.innerText = 'Render Video';
+        }
+        alert(data.error);
+      }
     }
 
     function downloadVideo() {
@@ -622,13 +793,10 @@
     }
 
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && e.target.id !== 'canvas-text' && e.target.tagName !== 'INPUT') {
+      if (e.target.id === 'canvas-text' || e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();
-      }
-      if (e.code === 'Enter' && e.target.id !== 'canvas-text' && e.target.tagName !== 'INPUT') {
-        e.preventDefault();
-        stampNext();
       }
     });
   </script>
