@@ -1,198 +1,455 @@
-# dhamma-studio
+Dhamma Studio
 
-A modern desktop application built with Python, pywebview, and FFmpeg designed for audio/caption QA verification, rich-text styling, and automated batch video generation with full Myanmar Unicode font support.
+> A desktop-friendly web application for creating Dhamma videos from audio, Excel-based captions, and background images.
 
----
-## ✨ Key Features
+Dhamma Studio helps users prepare caption timelines, match images to caption segments, preview video layouts, translate captions, and render videos in landscape or mobile-short formats.
 
-- **Audio & Caption QA:** Inspect audio synchronization with Myanmar text, calculate audio durations, and flag sync mismatches or missing files.
-- **Audio Playback:** Built-in player with **Spacebar** hotkey support for rapid auditing.
-- **Visual Text Styling Toolbar:** Apply inline highlight boxes (custom background & border colors) and text stroke outlines directly inside the live editor.
-- **AI Semantic Image Matching:** Integrates OpenAI's CLIP model (`clip-ViT-B-32`) to analyze caption semantics and automatically pair each scene with the most visually relevant image/video.
-- **Incremental Embedding Cache:** Scans media assets incrementally (`.clip_embeddings_cache.pt`), caching vectors locally so subsequent renders start instantly.
-- **Intelligent Non-Duplication:** Tracks used media paths across scenes to avoid repetitive back-to-back imagery while recycling assets dynamically when depleted.
-- **Continuous Line Stream Engine:** Eliminates orphaned single lines across slide transitions by maintaining a continuous line queue (e.g., exactly 3 lines per slide) and seamlessly cross-syncing audio slices across CSV rows.
-- **Intro Clip Isolation & BGM Toggle:** Isolates title/intro scenes when background music is enabled, with user-controlled BGM toggle support in the UI.
-- **Flexible Formats:** Supports Landscape (16:9 / 1920x1080) and Mobile/Shorts (9:16 / 1080x1920 with background blur effects).
-- **Customizable Styling:** Adjust overlay mode (Full vs Box), background opacity, text vertical positioning, font size, line spacing, and corner logo placement with safe margins.
-- **Cross-Platform:** Native desktop GUI support across Linux, Windows, and macOS with automatic hardware encoder detection (NVENC, VideoToolbox, QSV, and CPU libx264).
+## Features
 
----
-## 🛠️ System Prerequisites
+- Import audio files (`.mp3`)
+- Import caption timelines from Excel (`.xlsx`, `.xls`)
+- Upload background image folders
+- Automatically match images with caption segments
+- CLIP-based semantic image matching
+- Edit caption text directly in the interface
+- Update and delete timeline rows
+- Preview captions and images
+- Support YouTube Landscape (`16:9`)
+- Support Mobile Shorts (`9:16`)
+- Support 540p, 720p, and 1080p output
+- Support multiple languages
+- Optional background music (BGM)
+- Translate caption timelines
+- Render videos using FFmpeg
+- Download rendered MP4 videos
 
-### 1. FFmpeg Installation
+## Technology Stack
 
-FFmpeg must be installed and accessible in your system PATH:
+| Component | Technology |
+|---|---|
+| Backend | Python, FastAPI |
+| Frontend | HTML, JavaScript, Tailwind CSS |
+| Video Processing | FFmpeg |
+| Image Processing | Pillow |
+| Data Processing | Pandas, OpenPyXL |
+| Image Matching | Sentence Transformers / CLIP |
+| Package Management | uv / pip |
+| Packaging | PyInstaller |
 
-- **Linux (Ubuntu / Debian / Mint):**
-  ```bash
-  sudo apt update && sudo apt install -y ffmpeg
-  ```
-  macOS (via Homebrew):
-  ```
-  brew install ffmpeg
-  ```
-  Windows (via Winget or Chocolatey):
-  ```
-  # Using Winget
-  winget install Gyan.FFmpeg
-  
-  # Or using Chocolatey
-  choco install ffmpeg
-  ```
-2. GUI Runtime Dependencies
-  Linux (Ubuntu / Mint / Debian):
-  Install WebKit2GTK or PyQt6 runtime dependencies:
-    ```
-    sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1
-    ```
-  macOS: Uses the built-in native WebKit engine (No extra installation required).
+## System Requirements
 
-  Windows: Uses the built-in Microsoft Edge WebView2 runtime (Standard on Windows 10/11).
-3. Myanmar Unicode Fonts
-  Place your preferred Myanmar Unicode font (e.g., NamKhone Grand.ttf, Noto Sans Myanmar, or Pyidaungsu) inside the fonts/ directory or the project root.
+- Windows, Linux, or macOS
+- Python 3.12
+- FFmpeg
+- Modern web browser
+- Internet connection for installing dependencies and model files
 
-🚀 Installation & Setup
-1. Clone the Repository
-```
-Bash
-git clone [https://github.com/joinworkify/dhamma-studio.git](https://github.com/joinworkify/dhamma-studio.git)
-cd dhamma-studio
-```
-2. Set Up Environment & Install Dependencies
+## Installation
 
-**Option A — uv (recommended):**
-Project is pinned to Python 3.12 via `.python-version` / `pyproject.toml`. [Install uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't have it, then:
-```
-Bash
-uv sync
-```
-This creates `.venv` with Python 3.12 and installs all locked dependencies. Run the app with:
-```
-Bash
-uv run python main.py
+### 1. Clone the Repository
+
+```bash
+git clone <YOUR_REPOSITORY_URL>
+cd <YOUR_PROJECT_FOLDER>
+````
+
+Alternatively, download the repository as a ZIP file and extract it.
+
+### 2. Install Python
+
+Install Python **3.12**.
+
+Check the installed version:
+
+```bash
+python --version
 ```
 
-**Option B — pip + venv:**
-Linux / macOS:
+### 3. Install FFmpeg
+
+FFmpeg is required to render the final video.
+
+#### Windows
+
+1. Download and extract FFmpeg.
+2. Add the FFmpeg `bin` directory to the system PATH.
+3. Open a new terminal.
+
+```bash
+ffmpeg -version
 ```
-Bash
-python3 -m venv .venv
-source .venv/bin/activate
+
+#### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install ffmpeg
 ```
-Windows (Command Prompt / PowerShell):
+
+#### macOS
+
+```bash
+brew install ffmpeg
 ```
-PowerShell
+
+Verify the installation:
+
+```bash
+ffmpeg -version
+```
+
+### 4. Create a Virtual Environment
+
+#### Windows
+
+```bash
 python -m venv .venv
 .venv\Scripts\activate
 ```
-Install Python Dependencies:
+
+#### Linux / macOS
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 ```
-Bash
-pip install -r requirements.txt
+
+### 5. Install Dependencies
+
+Using `uv`:
+
+```bash
+uv sync
 ```
-📁 Project Structure
+
+Using `pip`:
+
+```bash
+pip install -e .
 ```
-Plaintext
-├── assets/                 # Project assets (e.g. dhamma_bgm.mp3)
-├── fonts/                  # Custom Myanmar TTF/OTF fonts
-├── static/
-│   ├── index.html          # Desktop GUI interface
-│   └── app.js              # pywebview frontend-backend bridge
-├── main.py                 # Application entry point & Backend API
-├── video_engine.py         # FFmpeg video rendering & Pillow text drawing
-├── requirements.txt        # Python package dependencies
-├── pyproject.toml          # uv project config (pinned to Python 3.12)
-├── dhamma_studio.spec      # PyInstaller build spec
-├── scripts/                # Build & packaging scripts (see below)
-├── .gitignore              # Git ignore rules
+
+## Running the Application
+
+Start the FastAPI server:
+
+```bash
+python server.py
+```
+
+Open the application in your browser:
+
+```text
+http://localhost:8000
+```
+
+## Usage
+
+### 1. Select Video Format
+
+Choose one of the following formats:
+
+* YouTube Landscape (`16:9`)
+* Mobile Shorts (`9:16`)
+
+### 2. Upload Audio
+
+1. Select an MP3 audio file.
+2. Upload the file.
+3. Use the audio controls to play or pause the audio.
+
+### 3. Upload Excel File
+
+1. Select an Excel file.
+2. Click **Load & Auto-Match**.
+3. Review the imported caption timeline.
+
+Make sure the Excel file contains valid start times, end times, and caption text.
+
+### 4. Upload Images
+
+1. Select the image folder.
+2. Upload the background images.
+3. Wait for the upload process to finish.
+4. Run image matching.
+
+### 5. Review and Edit Captions
+
+You can edit caption text directly in the interface.
+
+Check the following:
+
+* Caption text
+* Start time
+* End time
+* Line breaks
+* Punctuation
+* Matched image
+
+### 6. Match Images
+
+Click **Re-Match Images** to update image matching results.
+
+Image matching may take longer when:
+
+* The image folder contains many files.
+* Images have high resolutions.
+* The system uses CPU-based processing.
+
+### 7. Translate Captions
+
+1. Select the target language.
+2. Click the translation option.
+3. Review the translated captions.
+4. Confirm the timeline before rendering.
+
+### 8. Configure Video Settings
+
+Available settings include:
+
+* Video format
+* Output quality
+* Font size
+* Line spacing
+* Background dimming
+* Caption box color
+* Border color
+* Outline color
+* Background music
+
+### 9. Render Video
+
+1. Confirm all uploaded files.
+2. Review the preview.
+3. Click **Render Video**.
+4. Wait until rendering is complete.
+
+### 10. Download Video
+
+After rendering is complete:
+
+1. Click **Download Video**.
+2. Save the generated MP4 file.
+3. Check the video using a media player.
+
+## Output Resolutions
+
+### Landscape Format
+
+| Quality | Resolution  |
+| ------- | ----------- |
+| 540p    | 960 × 540   |
+| 720p    | 1280 × 720  |
+| 1080p   | 1920 × 1080 |
+
+### Mobile Format
+
+| Quality | Resolution  |
+| ------- | ----------- |
+| 540p    | 540 × 960   |
+| 720p    | 720 × 1280  |
+| 1080p   | 1080 × 1920 |
+
+## Excel Timeline Guidelines
+
+Before uploading the Excel file:
+
+* Confirm that all required columns exist.
+* Check that start times are valid.
+* Ensure end times are greater than start times.
+* Check for empty captions.
+* Check the segment order.
+* Review overlapping timestamps.
+* Confirm that the timeline matches the audio.
+
+Incorrect timestamps can cause caption synchronization problems.
+
+## Image Matching
+
+The application uses caption information to find relevant background images.
+
+The matching process includes:
+
+1. Scanning image files.
+2. Preparing image representations.
+3. Comparing caption and image meaning.
+4. Assigning images to timeline segments.
+5. Using matched images during preview and rendering.
+
+## Rendering
+
+The video engine:
+
+* Generates frames from the caption timeline.
+* Draws captions using Pillow.
+* Creates a frame sequence.
+* Uses FFmpeg to encode the video.
+* Uses the original audio track.
+* Supports optional background music.
+* Generates an MP4 output file.
+
+Rendering speed depends on:
+
+* CPU performance
+* Output resolution
+* Number of segments
+* Image size
+* Caption complexity
+* FFmpeg encoder
+* Audio duration
+
+## API Endpoints
+
+| Method | Endpoint                    | Description              |
+| ------ | --------------------------- | ------------------------ |
+| GET    | `/`                         | Load the frontend        |
+| GET    | `/api/status`               | Check application status |
+| POST   | `/api/upload_images_folder` | Upload images            |
+| POST   | `/api/match_images`         | Match images             |
+| POST   | `/api/upload_excel_sync`    | Upload Excel data        |
+| POST   | `/api/switch_format`        | Change video format      |
+| POST   | `/api/translate_timeline`   | Translate captions       |
+| POST   | `/api/update_row`           | Update a timeline row    |
+| POST   | `/api/delete_row`           | Delete a timeline row    |
+| POST   | `/api/start_render`         | Start rendering          |
+| GET    | `/api/download_video`       | Download the video       |
+| GET    | `/api/get_image/{filename}` | Retrieve an image        |
+| GET    | `/api/stream_audio`         | Stream audio             |
+| GET    | `/api/get_logo`             | Retrieve the logo        |
+
+## Project Structure
+
+```text
+Dhamma Studio/
+├── server.py
+├── video_engine.py
+├── index.html
+├── pyproject.toml
+├── uploads/
+├── media/
+├── output/
 └── README.md
 ```
 
----
-## 📦 Building a Standalone App (macOS / Windows)
+## Development
 
-These scripts package the app (via [uv](https://docs.astral.sh/uv/) + PyInstaller) into a double-clickable
-`.app` (macOS) or folder with `.exe` (Windows) — no Python install required to run it.
+Start the application from the project directory:
 
-**macOS:**
 ```bash
-./scripts/build_mac.sh
+python server.py
 ```
-Output: `dist/Dhamma Studio.app`
 
-**Windows** (run on Windows — PyInstaller does not cross-compile):
-```powershell
-.\scripts\build_windows.ps1
+Check the terminal for:
+
+* Import errors
+* Missing dependencies
+* Excel processing errors
+* Image matching errors
+* FFmpeg errors
+* Rendering failures
+
+## Packaging
+
+The project includes PyInstaller as a build dependency.
+
+Before packaging, confirm that:
+
+* Required files are included.
+* FFmpeg is available.
+* Fonts are included.
+* Model files are available.
+* Media folders are handled correctly.
+* The application works on the target operating system.
+
+## Troubleshooting
+
+### Application Does Not Start
+
+Check the Python version:
+
+```bash
+python --version
 ```
-Output: `dist\DhammaStudio\DhammaStudio.exe`
 
-Both scripts also fetch and bundle a static **ffmpeg** binary automatically
-(`scripts/fetch_ffmpeg_mac.sh` / `scripts/fetch_ffmpeg_windows.ps1`) so the packaged
-app works without ffmpeg installed on the target machine. The bundled ffmpeg build
-includes libx264 and is licensed **GPL** — keep that in mind if you redistribute
-the built app. Downloaded binaries live in `vendor/ffmpeg/` (gitignored, not committed).
+Activate the virtual environment and reinstall dependencies:
 
-Note: the first run of AI Semantic Image Matching downloads the CLIP model
-(`clip-ViT-B-32`, ~350MB) from Hugging Face on demand — the packaged app still needs
-internet access the first time that feature is used.
-
----
-💻 Usage Guide
-1. Launch the Application
+```bash
+pip install -e .
 ```
-Bash
-python main.py
+
+Start the server again:
+
+```bash
+python server.py
 ```
-2. Tab 1: Audio & Caption QA
-Click Browse CSV to load your dataset (requires caption and mp3 columns).
 
-Click Browse Audios to select the directory containing your audio files.
+### FFmpeg Is Not Recognized
 
-Review rows sequentially:
+Run:
 
-Press Spacebar or click Play to listen to the audio track.
+```bash
+ffmpeg -version
+```
 
-Use the Visual Toolbar to highlight text with custom fill/border boxes or apply text stroke outlines.
+If the command is not found, install FFmpeg and add it to the system PATH.
 
-Click Save Row to apply modifications.
+### Browser Cannot Connect
 
-Click Next Issue to jump directly to duration mismatches or missing file warnings.
+Make sure the server is running and open:
 
-Click Export Cleaned CSV to export your formatted and verified dataset.
+```text
+http://localhost:8000
+```
 
-3. Tab 2: Video Generator
-Switch to the Video Generator tab.
+Check the terminal for errors.
 
-Select your Media Folder (images or videos), optional Corner Logo, and specify the destination Output Path.
+### Image Matching Is Slow
 
-Configure video preferences:
+Possible causes:
 
-Format: Landscape (16:9) or Mobile/Shorts (9:16).
+* Large image files
+* A large number of images
+* CPU-based embedding generation
+* Slow disk performance
 
-Lines Per Page: Set fixed line count (e.g., 2 or 3 lines) to maintain consistent row layouts.
+Try reducing image sizes and removing unnecessary images.
 
-Position & Layout: Top, Center, or Bottom text alignment.
+### Captions Appear at the Wrong Time
 
-Typography & Overlay: Font size, line spacing, overlay color, and opacity.
+Check the Excel file for:
 
-Background Music: Toggle the BGM checkbox to enable or disable intro audio mixing.
+* Incorrect start times
+* Incorrect end times
+* Overlapping segments
+* Missing values
+* Incorrect segment order
 
-Click Start Video Rendering to generate the final synchronized video.
+### Rendering Is Slow
 
-📦 Python Dependencies
-pywebview - Cross-platform desktop GUI runtime
+Try the following:
 
-PyQt6 - GUI engine fallback for Linux/Windows
+* Use 540p or 720p for testing.
+* Reduce image resolution.
+* Test with a short audio file.
+* Close unnecessary applications.
+* Check the FFmpeg configuration.
+* Avoid repeated rendering during development.
 
-sentence-transformers & torch - CLIP-based AI vision and semantic text-to-image matching
+### Output Video Cannot Be Opened
 
-scikit-learn - Similarity score calculations and vector indexing
+Check:
 
-pygame - Low-latency audio playback engine for QA auditing
+* Whether FFmpeg completed successfully.
+* Whether the output file was generated completely.
+* Whether the source audio is valid.
+* Whether the terminal displays an FFmpeg error.
 
-pandas - CSV parsing, batch data traversal, and dataset management
+## Limitations
 
-mutagen - Audio metadata inspection and duration calculation
+* Rendering speed depends on hardware and FFmpeg configuration.
+* Image matching may require significant CPU and memory resources.
+* Incorrect Excel timestamps can affect synchronization.
+* Translation results should be reviewed.
+* Required fonts, models, and FFmpeg must be available.
 
-Pillow - Text layout, RAQM complex script font shaping, and overlay generation
+```
+```
