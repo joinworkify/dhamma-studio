@@ -15,3 +15,5 @@ temp_uploads/
 images/
 data/
 output_renders/
+dist/
+build/
