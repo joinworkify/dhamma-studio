@@ -3,6 +3,10 @@ import re
 import json
 import shutil
 import datetime
+import sys
+import threading
+import time
+import webbrowser
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -24,20 +28,33 @@ import openpyxl
 
 import video_engine
 
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "uploads"
+# Resource files (static/, fonts/, assets/, etc.) live with the application.
+# In a PyInstaller build, resources are read from the bundled application.
+# User-generated files are stored in a writable per-user application folder.
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    if sys.platform == "win32":
+        APP_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Dhamma Studio"
+    elif sys.platform == "darwin":
+        APP_DATA_DIR = Path.home() / "Library" / "Application Support" / "Dhamma Studio"
+    else:
+        APP_DATA_DIR = Path.home() / ".local" / "share" / "Dhamma Studio"
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    APP_DATA_DIR = BASE_DIR
+
+UPLOAD_DIR = APP_DATA_DIR / "uploads"
 IMAGES_DIR = UPLOAD_DIR / "images"
 STATIC_DIR = BASE_DIR / "static"
 FONTS_DIR = BASE_DIR / "fonts"
-OUTPUT_DIR = BASE_DIR / "output_renders"
+OUTPUT_DIR = APP_DATA_DIR / "output_renders"
+BUNDLED_IMAGES_DIR = BASE_DIR / "images"
 
-UPLOAD_DIR.mkdir(exist_ok=True)
-IMAGES_DIR.mkdir(exist_ok=True)
-STATIC_DIR.mkdir(exist_ok=True)
-FONTS_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-DEFAULT_MEDIA_DIR = IMAGES_DIR if IMAGES_DIR.exists() else (BASE_DIR / "images")
+DEFAULT_MEDIA_DIR = BUNDLED_IMAGES_DIR if BUNDLED_IMAGES_DIR.exists() else IMAGES_DIR
 
 app = FastAPI(title="Dhamma Studio")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -66,7 +83,7 @@ def set_progress(msg: str, pct: int):
 
 
 def get_available_images():
-    search_dirs = [Path(SESSION["media_dir"]), UPLOAD_DIR / "images", BASE_DIR / "images", BASE_DIR]
+    search_dirs = [Path(SESSION["media_dir"]), IMAGES_DIR, BUNDLED_IMAGES_DIR, BASE_DIR]
     all_imgs = []
     seen = set()
     for d in search_dirs:
@@ -201,7 +218,7 @@ def parse_excel_sync_sheet(excel_path: Path, format_type: str = "landscape"):
         matched_img_val = default_img_url
         if col_manual_image and pd.notna(r[col_manual_image]):
             custom_img = str(r[col_manual_image]).strip()
-            for cand_dir in [Path(SESSION["media_dir"]), UPLOAD_DIR / "images", BASE_DIR / "images"]:
+            for cand_dir in [Path(SESSION["media_dir"]), IMAGES_DIR, BUNDLED_IMAGES_DIR]:
                 if (cand_dir / custom_img).exists():
                     matched_img_val = f"/api/get_image/{custom_img}"
                     break
@@ -512,6 +529,26 @@ async def get_logo():
     return JSONResponse({"error": "No logo"}, status_code=404)
 
 
+def _open_browser():
+    time.sleep(1.2)
+    try:
+        webbrowser.open("http://127.0.0.1:8000")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+
+    # Automatically open the web UI when the desktop executable starts.
+    threading.Thread(target=_open_browser, daemon=True).start()
+
+    # Pass the FastAPI app object directly. Development reload is disabled
+    # because a PyInstaller desktop application should run as one process.
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=int(os.environ.get("DHAMMA_STUDIO_PORT", "8000")),
+        reload=False,
+        log_level="info",
+    )

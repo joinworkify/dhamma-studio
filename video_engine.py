@@ -5,6 +5,7 @@ import shutil
 import platform
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -12,10 +13,24 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from sentence_transformers import SentenceTransformer, util
 import torch
 
-BASE_DIR = Path(__file__).resolve().parent
+# Resource files are read from the bundled application directory.
+# Runtime-generated data is stored in a user-writable application directory
+# when running as a PyInstaller executable.
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    if sys.platform == "win32":
+        APP_DATA_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Dhamma Studio"
+    elif sys.platform == "darwin":
+        APP_DATA_DIR = Path.home() / "Library" / "Application Support" / "Dhamma Studio"
+    else:
+        APP_DATA_DIR = Path.home() / ".local" / "share" / "Dhamma Studio"
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    APP_DATA_DIR = BASE_DIR
+
 CURRENT_OS = platform.system().lower()
 
-CACHE_DIR = BASE_DIR / "data" / "cache"
+CACHE_DIR = APP_DATA_DIR / "data" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 _CLIP_MODEL = None
@@ -466,7 +481,7 @@ def render_all_clips(df, media_dir, audio_path, output_file, logo_path, cfg, pro
         # Target language အတွက် Font ရယူခြင်း
         font_path = resolve_font_path(target_lang=target_lang)
 
-        search_dirs = [Path(media_dir), BASE_DIR / "uploads" / "images", BASE_DIR / "images", BASE_DIR]
+        search_dirs = [Path(media_dir), APP_DATA_DIR / "uploads" / "images", BASE_DIR / "images", BASE_DIR]
         fallback_images = []
         for d in search_dirs:
             if d.exists():

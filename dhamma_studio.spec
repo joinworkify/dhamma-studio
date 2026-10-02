@@ -10,13 +10,19 @@ APP_NAME = "Dhamma Studio"
 ICON_ICNS = "assets/icon.icns"
 ICON_ICO = "assets/icon.ico"
 
-datas = [("static", "static"), ("fonts", "fonts")]
+# Read-only resources that the application needs at runtime.
+datas = [
+    ("static", "static"),
+    ("fonts", "fonts"),
+    ("assets", "assets"),
+]
+
 binaries = []
 hiddenimports = []
 
-# Bundled ffmpeg (fetched by scripts/fetch_ffmpeg_mac.sh or
-# scripts/fetch_ffmpeg_windows.ps1 into vendor/ffmpeg/<platform>/) so the
-# packaged app doesn't depend on ffmpeg being on the user's PATH.
+# Optional bundled FFmpeg.
+# Windows/macOS fetch scripts place FFmpeg under vendor/ffmpeg/<platform>/.
+# Linux can use the system ffmpeg from PATH unless a bundled binary is present.
 if sys.platform == "darwin":
     ffmpeg_src = Path("vendor/ffmpeg/mac/ffmpeg")
 elif sys.platform == "win32":
@@ -25,15 +31,15 @@ else:
     ffmpeg_src = Path("vendor/ffmpeg/linux/ffmpeg")
 
 if ffmpeg_src.exists():
-    # Added via `datas`, not `binaries`: it's a standalone CLI tool to copy
-    # as-is, not a shared library PyInstaller should rewrite link paths for.
     datas.append((str(ffmpeg_src), "ffmpeg-bin"))
 else:
-    print(f"WARNING: {ffmpeg_src} not found — building without bundled ffmpeg "
-          f"(app will fall back to ffmpeg on PATH at runtime).")
+    print(
+        f"INFO: {ffmpeg_src} not found. "
+        "The application will use ffmpeg from PATH at runtime."
+    )
 
-# These packages do dynamic/lazy imports and ship non-.py data (model configs,
-# compiled extensions) that PyInstaller's static analysis can't see on its own.
+# Sentence Transformers / Torch contain dynamic imports, native libraries,
+# and package data that PyInstaller may not discover automatically.
 for pkg in (
     "sentence_transformers",
     "transformers",
@@ -41,7 +47,6 @@ for pkg in (
     "torch",
     "sklearn",
     "scipy",
-    "PyQt6",
 ):
     pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
     datas += pkg_datas
@@ -49,7 +54,7 @@ for pkg in (
     hiddenimports += pkg_hiddenimports
 
 a = Analysis(
-    ["main.py"],
+    ["server.py"],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -61,6 +66,7 @@ a = Analysis(
     noarchive=False,
     cipher=block_cipher,
 )
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
@@ -72,8 +78,12 @@ exe = EXE(
     debug=False,
     strip=False,
     upx=False,
-    console=False,
-    icon=ICON_ICO if sys.platform == "win32" and Path(ICON_ICO).exists() else None,
+    console=True,
+    icon=(
+        ICON_ICO
+        if sys.platform == "win32" and Path(ICON_ICO).exists()
+        else None
+    ),
 )
 
 coll = COLLECT(
