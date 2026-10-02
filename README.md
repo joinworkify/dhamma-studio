@@ -1,27 +1,28 @@
-Dhamma Studio
+# Dhamma Studio
 
 > A desktop-friendly web application for creating Dhamma videos from audio, Excel-based captions, and background images.
 
-Dhamma Studio helps users prepare caption timelines, match images to caption segments, preview video layouts, translate captions, and render videos in landscape or mobile-short formats.
+Dhamma Studio helps users prepare caption timelines, automatically match background images, preview video layouts, translate captions, and render videos in landscape or mobile-short formats.
 
 ## Features
 
-- Import audio files (`.mp3`)
+- Import audio files (`.mp3`, `.wav`)
 - Import caption timelines from Excel (`.xlsx`, `.xls`)
 - Upload background image folders
-- Automatically match images with caption segments
 - CLIP-based semantic image matching
-- Edit caption text directly in the interface
-- Update and delete timeline rows
+- Edit, update, and delete caption segments
 - Preview captions and images
-- Support YouTube Landscape (`16:9`)
-- Support Mobile Shorts (`9:16`)
-- Support 540p, 720p, and 1080p output
-- Support multiple languages
+- YouTube Landscape (`16:9`)
+- Mobile Shorts (`9:16`)
+- 540p, 720p, and 1080p output
+- Multiple language support
+- Caption translation
 - Optional background music (BGM)
-- Translate caption timelines
-- Render videos using FFmpeg
+- FFmpeg-based video rendering
 - Download rendered MP4 videos
+- Windows `.exe` build
+- macOS `.app` build
+- Linux application build
 
 ## Technology Stack
 
@@ -33,47 +34,69 @@ Dhamma Studio helps users prepare caption timelines, match images to caption seg
 | Image Processing | Pillow |
 | Data Processing | Pandas, OpenPyXL |
 | Image Matching | Sentence Transformers / CLIP |
-| Package Management | uv / pip |
+| Package Management | uv |
 | Packaging | PyInstaller |
 
 ## System Requirements
 
 - Windows, Linux, or macOS
 - Python 3.12
+- Git
+- uv
 - FFmpeg
 - Modern web browser
-- Internet connection for installing dependencies and model files
+- Internet connection for initial dependency and model downloads
 
 ## Installation
 
 ### 1. Clone the Repository
 
 ```bash
-git clone <YOUR_REPOSITORY_URL>
-cd <YOUR_PROJECT_FOLDER>
+git clone https://github.com/joinworkify/dhamma-studio.git
+cd dhamma-studio
 ````
 
-Alternatively, download the repository as a ZIP file and extract it.
-
-### 2. Install Python
-
-Install Python **3.12**.
-
-Check the installed version:
-
-```bash
-python --version
-```
-
-### 3. Install FFmpeg
-
-FFmpeg is required to render the final video.
+### 2. Install uv
 
 #### Windows
 
-1. Download and extract FFmpeg.
-2. Add the FFmpeg `bin` directory to the system PATH.
-3. Open a new terminal.
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+#### Linux / macOS
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Check the installation:
+
+```bash
+uv --version
+```
+
+### 3. Install Dependencies
+
+From the project directory:
+
+```bash
+uv sync
+```
+
+For development and packaging:
+
+```bash
+uv sync --all-groups
+```
+
+### 4. Install FFmpeg
+
+#### Windows
+
+Install FFmpeg and add the FFmpeg `bin` directory to the system PATH.
+
+Check the installation:
 
 ```bash
 ffmpeg -version
@@ -92,364 +115,139 @@ sudo apt install ffmpeg
 brew install ffmpeg
 ```
 
-Verify the installation:
+Check the installation:
 
 ```bash
 ffmpeg -version
 ```
 
-### 4. Create a Virtual Environment
+## Run from Source
 
-#### Windows
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-```
-
-#### Linux / macOS
+Start the application:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
+uv run python server.py
 ```
 
-### 5. Install Dependencies
-
-Using `uv`:
-
-```bash
-uv sync
-```
-
-Using `pip`:
-
-```bash
-pip install -e .
-```
-
-## Running the Application
-
-Start the FastAPI server:
-
-```bash
-python server.py
-```
-
-Open the application in your browser:
+Then open the application in your browser:
 
 ```text
 http://localhost:8000
 ```
 
-## Usage
+## Build the Application
 
-### 1. Select Video Format
+Dhamma Studio includes platform-specific build scripts for Windows, macOS, and Linux.
 
-Choose one of the following formats:
+> Build the application on its target operating system. Windows applications should be built on Windows, macOS applications on macOS, and Linux applications on Linux.
 
-* YouTube Landscape (`16:9`)
-* Mobile Shorts (`9:16`)
+### Windows
 
-### 2. Upload Audio
+Open PowerShell inside the project directory:
 
-1. Select an MP3 audio file.
-2. Upload the file.
-3. Use the audio controls to play or pause the audio.
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\build_windows.ps1
+```
 
-### 3. Upload Excel File
+Build output:
 
-1. Select an Excel file.
-2. Click **Load & Auto-Match**.
-3. Review the imported caption timeline.
+```text
+dist\DhammaStudio\DhammaStudio.exe
+```
 
-Make sure the Excel file contains valid start times, end times, and caption text.
+> Distribute the entire `dist\DhammaStudio\` folder, not only the `.exe` file.
 
-### 4. Upload Images
+### macOS
 
-1. Select the image folder.
-2. Upload the background images.
-3. Wait for the upload process to finish.
-4. Run image matching.
+Open Terminal inside the project directory:
 
-### 5. Review and Edit Captions
+```bash
+chmod +x scripts/build_mac.sh
+./scripts/build_mac.sh
+```
 
-You can edit caption text directly in the interface.
+Build output:
 
-Check the following:
+```text
+dist/Dhamma Studio.app
+```
 
-* Caption text
-* Start time
-* End time
-* Line breaks
-* Punctuation
-* Matched image
+### Linux
 
-### 6. Match Images
+```bash
+chmod +x scripts/build_linux.sh
+./scripts/build_linux.sh
+```
 
-Click **Re-Match Images** to update image matching results.
+Build output:
 
-Image matching may take longer when:
+```text
+dist/DhammaStudio/DhammaStudio
+```
 
-* The image folder contains many files.
-* Images have high resolutions.
-* The system uses CPU-based processing.
+Run the Linux application:
 
-### 7. Translate Captions
+```bash
+./dist/DhammaStudio/DhammaStudio
+```
 
-1. Select the target language.
-2. Click the translation option.
-3. Review the translated captions.
-4. Confirm the timeline before rendering.
+Then open:
 
-### 8. Configure Video Settings
+```text
+http://localhost:8000
+```
 
-Available settings include:
+## User Guide
 
-* Video format
-* Output quality
-* Font size
-* Line spacing
-* Background dimming
-* Caption box color
-* Border color
-* Outline color
-* Background music
+For the complete setup and usage instructions, see:
 
-### 9. Render Video
+[Dhamma Studio Final User Guide](./Dhamma_Studio_Final_NonDeveloper_Guide_Final.docx)
 
-1. Confirm all uploaded files.
-2. Review the preview.
-3. Click **Render Video**.
-4. Wait until rendering is complete.
+The guide covers:
 
-### 10. Download Video
-
-After rendering is complete:
-
-1. Click **Download Video**.
-2. Save the generated MP4 file.
-3. Check the video using a media player.
-
-## Output Resolutions
-
-### Landscape Format
-
-| Quality | Resolution  |
-| ------- | ----------- |
-| 540p    | 960 × 540   |
-| 720p    | 1280 × 720  |
-| 1080p   | 1920 × 1080 |
-
-### Mobile Format
-
-| Quality | Resolution  |
-| ------- | ----------- |
-| 540p    | 540 × 960   |
-| 720p    | 720 × 1280  |
-| 1080p   | 1080 × 1920 |
-
-## Excel Timeline Guidelines
-
-Before uploading the Excel file:
-
-* Confirm that all required columns exist.
-* Check that start times are valid.
-* Ensure end times are greater than start times.
-* Check for empty captions.
-* Check the segment order.
-* Review overlapping timestamps.
-* Confirm that the timeline matches the audio.
-
-Incorrect timestamps can cause caption synchronization problems.
-
-## Image Matching
-
-The application uses caption information to find relevant background images.
-
-The matching process includes:
-
-1. Scanning image files.
-2. Preparing image representations.
-3. Comparing caption and image meaning.
-4. Assigning images to timeline segments.
-5. Using matched images during preview and rendering.
-
-## Rendering
-
-The video engine:
-
-* Generates frames from the caption timeline.
-* Draws captions using Pillow.
-* Creates a frame sequence.
-* Uses FFmpeg to encode the video.
-* Uses the original audio track.
-* Supports optional background music.
-* Generates an MP4 output file.
-
-Rendering speed depends on:
-
-* CPU performance
-* Output resolution
-* Number of segments
-* Image size
-* Caption complexity
-* FFmpeg encoder
-* Audio duration
-
-## API Endpoints
-
-| Method | Endpoint                    | Description              |
-| ------ | --------------------------- | ------------------------ |
-| GET    | `/`                         | Load the frontend        |
-| GET    | `/api/status`               | Check application status |
-| POST   | `/api/upload_images_folder` | Upload images            |
-| POST   | `/api/match_images`         | Match images             |
-| POST   | `/api/upload_excel_sync`    | Upload Excel data        |
-| POST   | `/api/switch_format`        | Change video format      |
-| POST   | `/api/translate_timeline`   | Translate captions       |
-| POST   | `/api/update_row`           | Update a timeline row    |
-| POST   | `/api/delete_row`           | Delete a timeline row    |
-| POST   | `/api/start_render`         | Start rendering          |
-| GET    | `/api/download_video`       | Download the video       |
-| GET    | `/api/get_image/{filename}` | Retrieve an image        |
-| GET    | `/api/stream_audio`         | Stream audio             |
-| GET    | `/api/get_logo`             | Retrieve the logo        |
+* Git clone and project setup
+* Windows, macOS, and Linux builds
+* Creating the Excel subtitle file using Gemini AI
+* Gemini Excel generation prompt
+* Excel timeline requirements
+* Audio and Excel upload
+* Background image matching
+* Caption editing
+* Translation
+* Video settings
+* Video rendering
+* Downloading the final MP4
+* Troubleshooting
 
 ## Project Structure
 
 ```text
-Dhamma Studio/
+dhamma-studio/
+├── assets/
+├── data/
+├── fonts/
+├── images/
+├── output_renders/
+├── scripts/
+│   ├── build_linux.sh
+│   ├── build_mac.sh
+│   ├── build_windows.ps1
+│   ├── fetch_ffmpeg_mac.sh
+│   └── fetch_ffmpeg_windows.ps1
+├── static/
+├── uploads/
+├── dhamma_studio.spec
+├── pyproject.toml
+├── requirements.txt
 ├── server.py
 ├── video_engine.py
-├── index.html
-├── pyproject.toml
-├── uploads/
-├── media/
-├── output/
-└── README.md
+└── uv.lock
 ```
 
-## Development
+## License
 
-Start the application from the project directory:
-
-```bash
-python server.py
-```
-
-Check the terminal for:
-
-* Import errors
-* Missing dependencies
-* Excel processing errors
-* Image matching errors
-* FFmpeg errors
-* Rendering failures
-
-## Packaging
-
-The project includes PyInstaller as a build dependency.
-
-Before packaging, confirm that:
-
-* Required files are included.
-* FFmpeg is available.
-* Fonts are included.
-* Model files are available.
-* Media folders are handled correctly.
-* The application works on the target operating system.
-
-## Troubleshooting
-
-### Application Does Not Start
-
-Check the Python version:
-
-```bash
-python --version
-```
-
-Activate the virtual environment and reinstall dependencies:
-
-```bash
-pip install -e .
-```
-
-Start the server again:
-
-```bash
-python server.py
-```
-
-### FFmpeg Is Not Recognized
-
-Run:
-
-```bash
-ffmpeg -version
-```
-
-If the command is not found, install FFmpeg and add it to the system PATH.
-
-### Browser Cannot Connect
-
-Make sure the server is running and open:
-
-```text
-http://localhost:8000
-```
-
-Check the terminal for errors.
-
-### Image Matching Is Slow
-
-Possible causes:
-
-* Large image files
-* A large number of images
-* CPU-based embedding generation
-* Slow disk performance
-
-Try reducing image sizes and removing unnecessary images.
-
-### Captions Appear at the Wrong Time
-
-Check the Excel file for:
-
-* Incorrect start times
-* Incorrect end times
-* Overlapping segments
-* Missing values
-* Incorrect segment order
-
-### Rendering Is Slow
-
-Try the following:
-
-* Use 540p or 720p for testing.
-* Reduce image resolution.
-* Test with a short audio file.
-* Close unnecessary applications.
-* Check the FFmpeg configuration.
-* Avoid repeated rendering during development.
-
-### Output Video Cannot Be Opened
-
-Check:
-
-* Whether FFmpeg completed successfully.
-* Whether the output file was generated completely.
-* Whether the source audio is valid.
-* Whether the terminal displays an FFmpeg error.
-
-## Limitations
-
-* Rendering speed depends on hardware and FFmpeg configuration.
-* Image matching may require significant CPU and memory resources.
-* Incorrect Excel timestamps can affect synchronization.
-* Translation results should be reviewed.
-* Required fonts, models, and FFmpeg must be available.
+This project is intended for the Dhamma Studio video-generation workflow.
 
 ```
 ```
