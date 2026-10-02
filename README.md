@@ -202,7 +202,7 @@ http://localhost:8000
 
 For the complete setup and usage instructions, see:
 
-[Dhamma Studio Final User Guide](./Dhamma_Studio_Final_NonDeveloper_Guide_Final.docx)
+[Dhamma Studio Final User Guide](https://docs.google.com/document/d/1TCIKESOf9TuirlvBxZ6Ymf1P-EurHMuVBlvE44HGGxQ/edit?usp=sharing)
 
 The guide covers:
 
