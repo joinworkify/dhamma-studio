@@ -167,7 +167,7 @@ def scan_and_index_images(media_files, progress_cb=None):
     cached_dict = {}
     if cache_file.exists():
         try:
-            cached_dict = torch.load(cache_file, weights_only=False)
+            cached_dict = torch.load(cache_file, weights_only=False, map_location="cpu")
             if not isinstance(cached_dict, dict):
                 cached_dict = {}
         except Exception:
@@ -221,8 +221,10 @@ def batch_match_images_hybrid(clip_queries, valid_paths, image_embeddings, top_k
     model = get_clip_model()
     clean_queries = [str(q).strip() or "dhamma temple monks nature" for q in clip_queries]
     with torch.no_grad():
-        text_embeddings = model.encode(clean_queries, batch_size=32, convert_to_tensor=True)
-        cos_matrix = util.cos_sim(text_embeddings, image_embeddings)
+        # Image embeddings are cached on CPU; the model may run on MPS/CUDA,
+        # so bring both onto the same device before comparing.
+        text_embeddings = model.encode(clean_queries, batch_size=32, convert_to_tensor=True).cpu()
+        cos_matrix = util.cos_sim(text_embeddings, image_embeddings.cpu())
 
     matched_results = []
     usage_counts = Counter()
