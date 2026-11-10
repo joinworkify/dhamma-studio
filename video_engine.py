@@ -39,7 +39,12 @@ _CLIP_MODEL = None
 def get_clip_model():
     global _CLIP_MODEL
     if _CLIP_MODEL is None:
-        _CLIP_MODEL = SentenceTransformer("clip-ViT-B-32")
+        # Prefer the model bundled into the app (offline); otherwise download
+        # from Hugging Face on first use.
+        bundled = BASE_DIR / "models" / "clip-ViT-B-32"
+        _CLIP_MODEL = SentenceTransformer(
+            str(bundled) if bundled.exists() else "clip-ViT-B-32"
+        )
     return _CLIP_MODEL
 
 

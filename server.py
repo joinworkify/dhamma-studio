@@ -529,10 +529,25 @@ async def get_logo():
     return JSONResponse({"error": "No logo"}, status_code=404)
 
 
-def _open_browser():
+def _pick_port() -> int:
+    """Use DHAMMA_STUDIO_PORT/8000 if free, otherwise any free port."""
+    import socket
+
+    preferred = int(os.environ.get("DHAMMA_STUDIO_PORT", "8000"))
+    for port in (preferred, 0):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("127.0.0.1", port))
+                return sock.getsockname()[1]
+            except OSError:
+                continue
+    return preferred
+
+
+def _open_browser(port: int):
     time.sleep(1.2)
     try:
-        webbrowser.open("http://127.0.0.1:8000")
+        webbrowser.open(f"http://127.0.0.1:{port}")
     except Exception:
         pass
 
@@ -541,14 +556,15 @@ if __name__ == "__main__":
     import uvicorn
 
     # Automatically open the web UI when the desktop executable starts.
-    threading.Thread(target=_open_browser, daemon=True).start()
+    port = _pick_port()
+    threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
 
     # Pass the FastAPI app object directly. Development reload is disabled
     # because a PyInstaller desktop application should run as one process.
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=int(os.environ.get("DHAMMA_STUDIO_PORT", "8000")),
+        port=port,
         reload=False,
         log_level="info",
     )

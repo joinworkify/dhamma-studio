@@ -173,6 +173,8 @@ Build output:
 dist/Dhamma Studio.app
 ```
 
+The macOS build targets **Apple Silicon (arm64) only** and must be built on an Apple Silicon Mac. It bundles an arm64 FFmpeg and the CLIP model, so the finished app needs no Python, Homebrew, FFmpeg, or internet connection. If port 8000 is busy, the app picks a free port and opens the browser there. The app is not notarized: on another Mac, right-click it and choose Open the first time, or run `xattr -cr "Dhamma Studio.app"`.
+
 ### Linux
 
 ```bash
@@ -233,6 +235,7 @@ dhamma-studio/
 │   ├── build_linux.sh
 │   ├── build_mac.sh
 │   ├── build_windows.ps1
+│   ├── fetch_clip_model.py
 │   ├── fetch_ffmpeg_mac.sh
 │   └── fetch_ffmpeg_windows.ps1
 ├── static/

@@ -17,6 +17,13 @@ datas = [
     ("assets", "assets"),
 ]
 
+# Bundled CLIP model (offline use). Created by scripts/fetch_clip_model.py.
+clip_dir = Path("vendor/models/clip-ViT-B-32")
+if clip_dir.exists():
+    datas.append((str(clip_dir), "models/clip-ViT-B-32"))
+else:
+    print(f"INFO: {clip_dir} not found. The CLIP model will download on first run.")
+
 binaries = []
 hiddenimports = []
 
@@ -79,6 +86,8 @@ exe = EXE(
     strip=False,
     upx=False,
     console=True,
+    # Apple Silicon only on macOS (ignored on other platforms).
+    target_arch="arm64" if sys.platform == "darwin" else None,
     icon=(
         ICON_ICO
         if sys.platform == "win32" and Path(ICON_ICO).exists()
