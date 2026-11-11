@@ -7,6 +7,8 @@ import sys
 import threading
 import time
 import webbrowser
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -56,10 +58,6 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_MEDIA_DIR = BUNDLED_IMAGES_DIR if BUNDLED_IMAGES_DIR.exists() else IMAGES_DIR
 
-app = FastAPI(title="Dhamma Studio")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/fonts", StaticFiles(directory=FONTS_DIR), name="fonts")
-
 SESSION = {
     "audio_path": "",
     "media_dir": str(DEFAULT_MEDIA_DIR),
@@ -75,6 +73,101 @@ SESSION = {
     "image_embeddings": None,
     "current_mode": "excel"
 }
+
+
+# Desktop-app lifecycle management.
+HEARTBEAT_TIMEOUT = 120.0
+WATCHDOG_INTERVAL = 5.0
+_shutdown_lock = threading.Lock()
+_shutdown_requested = False
+_shutdown_started = False
+_manual_shutdown_requested = False
+_last_heartbeat = time.monotonic()
+_server = None
+
+
+def try_begin_render() -> bool:
+    """Atomically reserve the render slot unless shutdown has started."""
+    with _shutdown_lock:
+        if _shutdown_requested or _shutdown_started or SESSION["is_rendering"]:
+            return False
+        SESSION["is_rendering"] = True
+        return True
+
+
+def release_render_reservation() -> None:
+    with _shutdown_lock:
+        SESSION["is_rendering"] = False
+
+
+def _perform_shutdown(manual: bool = False) -> bool:
+    """Commit graceful server shutdown only when no render is active."""
+    global _shutdown_started, _shutdown_requested
+
+    with _shutdown_lock:
+        if _shutdown_started:
+            return True
+
+        if SESSION["is_rendering"]:
+            return False
+
+        if not manual and not _manual_shutdown_requested:
+            # A recent heartbeat cancels a pending automatic timeout.
+            if time.monotonic() - _last_heartbeat < HEARTBEAT_TIMEOUT:
+                _shutdown_requested = False
+                return False
+
+        _shutdown_started = True
+        _shutdown_requested = True
+        server = _server
+
+    if server is not None:
+        server.should_exit = True
+    return True
+
+
+async def _shutdown_watchdog() -> None:
+    global _shutdown_requested
+
+    while True:
+        await asyncio.sleep(WATCHDOG_INTERVAL)
+
+        with _shutdown_lock:
+            if _shutdown_started:
+                return
+
+            if _manual_shutdown_requested:
+                should_shutdown = True
+                manual = True
+            else:
+                if time.monotonic() - _last_heartbeat >= HEARTBEAT_TIMEOUT:
+                    _shutdown_requested = True
+                should_shutdown = _shutdown_requested
+                manual = False
+
+            is_rendering = SESSION["is_rendering"]
+
+        if should_shutdown and not is_rendering:
+            if _perform_shutdown(manual=manual):
+                return
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    watchdog_task = asyncio.create_task(_shutdown_watchdog())
+    try:
+        yield
+    finally:
+        watchdog_task.cancel()
+        try:
+            await watchdog_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Dhamma Studio", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/fonts", StaticFiles(directory=FONTS_DIR), name="fonts")
 
 
 def set_progress(msg: str, pct: int):
@@ -282,6 +375,40 @@ async def serve_index():
         return f.read()
 
 
+@app.post("/api/heartbeat")
+async def heartbeat():
+    global _last_heartbeat, _shutdown_requested
+
+    with _shutdown_lock:
+        if _shutdown_started:
+            return JSONResponse(
+                {"success": False, "shutting_down": True},
+                status_code=503,
+            )
+        _last_heartbeat = time.monotonic()
+        # A fresh heartbeat cancels only an automatic timeout request.
+        if not _manual_shutdown_requested:
+            _shutdown_requested = False
+
+    return {"success": True}
+
+
+@app.post("/api/shutdown")
+async def request_shutdown():
+    global _shutdown_requested, _manual_shutdown_requested
+
+    with _shutdown_lock:
+        if _shutdown_started:
+            return {"success": True, "shutting_down": True}
+        _manual_shutdown_requested = True
+        _shutdown_requested = True
+        deferred = SESSION["is_rendering"]
+
+    # The watchdog performs the graceful shutdown after the response is sent
+    # and, if necessary, after the active render has finished.
+    return {"success": True, "deferred": deferred}
+
+
 @app.get("/api/status")
 async def get_status():
     return {
@@ -432,64 +559,81 @@ async def start_render(
     target_lang: str = Form("my"),
     rows_json: Optional[str] = Form(None)
 ):
-    if not SESSION["rows"] or not SESSION["audio_path"]:
-        return JSONResponse({"success": False, "error": "Missing assets."}, status_code=400)
+    # Reserve the render slot before validating or preparing any render data.
+    # This serializes render startup against manual/automatic shutdown.
+    if not try_begin_render():
+        return JSONResponse(
+            {"success": False, "error": "The app is shutting down or a render is already active."},
+            status_code=503,
+        )
 
-    selected_lang = (target_lang or "my").strip().lower()
+    try:
+        if not SESSION["rows"] or not SESSION["audio_path"]:
+            release_render_reservation()
+            return JSONResponse({"success": False, "error": "Missing assets."}, status_code=400)
 
-    # Use the complete rows sent by the browser so all preview edits are preserved.
-    # In particular, do not restore captions from the original translations map.
-    if rows_json:
-        try:
-            client_rows = json.loads(rows_json)
-            if isinstance(client_rows, list) and client_rows:
-                SESSION["rows"] = client_rows
-        except (TypeError, json.JSONDecodeError):
-            pass
+        selected_lang = (target_lang or "my").strip().lower()
 
-    for row in SESSION["rows"]:
-        row["target_lang"] = selected_lang
+        # Use the complete rows sent by the browser so all preview edits are preserved.
+        # In particular, do not restore captions from the original translations map.
+        if rows_json:
+            try:
+                client_rows = json.loads(rows_json)
+                if isinstance(client_rows, list) and client_rows:
+                    SESSION["rows"] = client_rows
+            except (TypeError, json.JSONDecodeError):
+                pass
 
-    SESSION["last_video"] = ""
-    SESSION["is_rendering"] = True
-    set_progress(f"Initializing [{selected_lang.upper()}] render...", 5)
+        for row in SESSION["rows"]:
+            row["target_lang"] = selected_lang
 
-    def _render_task():
-        df = pd.DataFrame(SESSION["rows"])
-        out_file = OUTPUT_DIR / f"dhamma_{format}_{quality}.mp4"
+        SESSION["last_video"] = ""
+        set_progress(f"Initializing [{selected_lang.upper()}] render...", 5)
 
-        cfg = {
-            "format": format,
-            "quality": quality,
-            "font_size": font_size,
-            "line_spacing": line_spacing,
-            "opacity": opacity,
-            "enable_bgm": enable_bgm,
-            "target_lang": selected_lang
-        }
+        def _render_task():
+            try:
+                # Keep setup inside try so every exception releases the render lock.
+                df = pd.DataFrame(SESSION["rows"])
+                out_file = OUTPUT_DIR / f"dhamma_{format}_{quality}.mp4"
 
-        try:
-            success, res = video_engine.render_all_clips(
-                df=df,
-                media_dir=SESSION["media_dir"],
-                audio_path=SESSION["audio_path"],
-                output_file=str(out_file),
-                logo_path=SESSION["logo_path"],
-                cfg=cfg,
-                progress_cb=set_progress
-            )
-            if success and out_file.exists():
-                SESSION["last_video"] = str(out_file)
-                set_progress(f"[{selected_lang.upper()}] Ready! Click Download.", 100)
-            else:
-                set_progress(f"Render failed: {res}", 0)
-        except Exception as exc:
-            set_progress(f"Render failed: {exc}", 0)
-        finally:
-            SESSION["is_rendering"] = False
+                cfg = {
+                    "format": format,
+                    "quality": quality,
+                    "font_size": font_size,
+                    "line_spacing": line_spacing,
+                    "opacity": opacity,
+                    "enable_bgm": enable_bgm,
+                    "target_lang": selected_lang
+                }
 
-    background_tasks.add_task(_render_task)
-    return {"success": True}
+                success, res = video_engine.render_all_clips(
+                    df=df,
+                    media_dir=SESSION["media_dir"],
+                    audio_path=SESSION["audio_path"],
+                    output_file=str(out_file),
+                    logo_path=SESSION["logo_path"],
+                    cfg=cfg,
+                    progress_cb=set_progress
+                )
+                if success and out_file.exists():
+                    SESSION["last_video"] = str(out_file)
+                    set_progress(f"[{selected_lang.upper()}] Ready! Click Download.", 100)
+                else:
+                    set_progress(f"Render failed: {res}", 0)
+            except Exception as exc:
+                set_progress(f"Render failed: {exc}", 0)
+            finally:
+                release_render_reservation()
+
+        background_tasks.add_task(_render_task)
+        return {"success": True}
+
+    except Exception as exc:
+        release_render_reservation()
+        return JSONResponse(
+            {"success": False, "error": str(exc)},
+            status_code=500,
+        )
 
 
 @app.get("/api/download_video")
@@ -557,14 +701,14 @@ if __name__ == "__main__":
 
     # Automatically open the web UI when the desktop executable starts.
     port = _pick_port()
-    threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
-
-    # Pass the FastAPI app object directly. Development reload is disabled
-    # because a PyInstaller desktop application should run as one process.
-    uvicorn.run(
+    config = uvicorn.Config(
         app,
         host="127.0.0.1",
         port=port,
         reload=False,
         log_level="info",
     )
+    _server = uvicorn.Server(config)
+
+    threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
+    _server.run()
