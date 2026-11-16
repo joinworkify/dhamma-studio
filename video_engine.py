@@ -323,7 +323,8 @@ def scan_and_index_images(media_files, progress_cb=None):
         try:
             cached_dict = torch.load(
                 cache_file,
-                weights_only=False
+                weights_only=False,
+                map_location="cpu"
             )
 
             if not isinstance(cached_dict, dict):
@@ -433,16 +434,17 @@ def batch_match_images_hybrid(
     ]
 
     with torch.no_grad():
-
+        # Image embeddings are cached on CPU; keep both tensors on the same
+        # device before calculating cosine similarity.
         text_embeddings = model.encode(
             clean_queries,
             batch_size=32,
             convert_to_tensor=True
-        )
+        ).cpu()
 
         cos_matrix = util.cos_sim(
             text_embeddings,
-            image_embeddings
+            image_embeddings.cpu()
         )
 
     matched_results = []
