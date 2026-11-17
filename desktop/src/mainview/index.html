@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    // Backend base URL is passed by the Electrobun main process (?api=http://127.0.0.1:PORT).
+    window.API_BASE = (new URLSearchParams(location.search).get('api') || '').replace(/\/$/, '');
+    var API_BASE = window.API_BASE;
+  </script>
+  <meta charset="UTF-8">
+  <title>Dhamma Studio - Dynamic Excel Sync</title>
+  <style>
+    @font-face {
+      font-family: 'NamKhone';
+      src: url('/fonts/NamKhone%20Grand%20%282%29.ttf'), url('/fonts/NamKhone%20Grand.ttf'), url('/fonts/NamKhone Grand (2).ttf'), url('/fonts/NamKhone Grand.ttf');
+    }
+    .font-mm { font-family: 'NamKhone', sans-serif; }
+    .text-stroke {
+      text-shadow:
+        -2px -2px 0 #000,
+         2px -2px 0 #000,
+        -2px  2px 0 #000,
+         2px  2px 0 #000,
+        -3px 0 0 #000,
+         3px 0 0 #000,
+         0 -3px 0 #000,
+         0  3px 0 #000;
+    }
+    .viewport-landscape { width: 100%; aspect-ratio: 16/9; }
+    .viewport-mobile { width: min(100%, 390px); height: min(78vh, 620px); max-height: 620px; aspect-ratio: 9/16; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  
+    /* Gentle Dhamma caption transition */
+    #canvas-text { opacity: 1; transition: opacity 550ms ease-in-out; }
+    #canvas-text.caption-fade-out { opacity: 0; }
+    #canvas-text.caption-fade-in { opacity: 1; }
+
+    /* Full-screen closing page (replaces the original UI) */
+    #closing-page {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #090d16;
+      color: #e2e8f0;
+      text-align: center;
+    }
+    body.closing #closing-page { display: flex; }
+    body.closing > *:not(#closing-page) { display: none !important; }
+
+    #closing-page .brand {
+      font-size: 1.375rem;
+      font-weight: 700;
+      color: #818cf8;
+      letter-spacing: 0.04em;
+      margin-bottom: 2.5rem;
+    }
+
+    .closing-icon {
+      width: 5rem;
+      height: 5rem;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .closing-icon.spinner {
+      border: 4px solid #334155;
+      border-top-color: #6366f1;
+      animation: closing-spin 0.9s linear infinite;
+    }
+    .closing-icon.check { background: #10b981; }
+    .closing-icon svg { width: 2.5rem; height: 2.5rem; color: #fff; }
+
+    @keyframes closing-spin { to { transform: rotate(360deg); } }
+
+    #closing-message {
+      font-size: 1.125rem;
+      color: #cbd5e1;
+      max-width: 28rem;
+    }
+</style>
+</head>
+<body class="bg-[#090d16] text-slate-100 flex flex-col h-screen overflow-hidden select-none">
+
+  <!-- Header -->
+  <header class="h-14 border-b border-slate-800 bg-[#111827] px-6 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">DH</div>
+      <div>
+        <h1 class="text-sm font-bold text-white tracking-wide">Dhamma Studio</h1>
+        <p class="text-[10px] text-slate-400">Excel Multi-Language Sync • Live Canvas</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-4">
+      <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+        <button id="btn-fmt-landscape" onclick="switchVideoFormat('landscape')" class="px-3 py-1 rounded bg-indigo-600 font-semibold text-white">YouTube (16:9)</button>
+        <button id="btn-fmt-mobile" onclick="switchVideoFormat('mobile')" class="px-3 py-1 rounded text-slate-400 hover:text-white">Mobile Shorts (9:16)</button>
+      </div>
+
+      <div class="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-full w-80">
+        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div id="progress-bar" class="bg-indigo-500 h-full transition-all duration-300 w-0"></div>
+        </div>
+        <span id="progress-text" class="text-xs font-mono text-indigo-400 shrink-0">Ready</span>
+      </div>
+
+      <button id="btn-quit" onclick="quitApp()" class="bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-3 py-2 rounded-lg border border-red-600 transition">
+        Quit
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <main class="flex-1 flex overflow-hidden p-4 gap-4">
+
+    <!-- LEFT: Viewport & Toolbar -->
+    <section class="flex-[1.15] flex flex-col gap-3">
+      
+      <!-- Video Viewport -->
+      <div class="flex-1 bg-black rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-2xl p-2">
+        <div id="video-viewport" class="viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950">
+          
+          <img id="canvas-bg-blur" class="absolute inset-0 w-full h-full object-cover filter blur-md brightness-50 z-0 hidden" alt="Blurred BG">
+          
+          <div id="mobile-center-banner" class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[52%] border-y border-white/20 overflow-hidden z-10 hidden flex items-center justify-center">
+            <img id="canvas-bg-center" class="w-full h-full object-cover" alt="Sharp Banner">
+            <div class="absolute inset-0 bg-black/25"></div>
+          </div>
+
+          <img id="canvas-bg" class="absolute inset-0 w-full h-full object-cover z-0 hidden" alt="Background">
+          <div id="canvas-dimmer" class="absolute inset-0 bg-[#00000073] z-10 transition-colors pointer-events-none"></div>
+          <img id="logo-preview" class="absolute top-4 right-5 w-16 h-16 object-contain z-30 hidden" alt="Logo">
+          
+          <div class="relative z-30 group flex flex-col items-center justify-center w-full px-6">
+            <div id="canvas-text" 
+                 contenteditable="true" 
+                 oninput="syncCanvasToMemory()" 
+                 class="font-mm text-stroke text-center text-white leading-relaxed font-semibold tracking-wide drop-shadow-lg outline-none cursor-text select-text whitespace-pre-line w-[88%] max-w-[88%] mx-auto break-words">
+              (Subtitle text will appear here)
+            </div>
+
+            <div id="canvas-original-tooltip" 
+                 class="absolute bottom-[-45px] opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none bg-slate-950/95 border border-indigo-500/60 text-amber-300 text-xs px-3.5 py-1.5 rounded-lg shadow-2xl max-w-[85%] truncate font-mm z-50">
+              Original: -
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Word Styler Toolbar -->
+      <div class="bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold text-indigo-400 uppercase">Style:</span>
+          
+          <button onmousedown="event.preventDefault()" onclick="applyBoxStyle()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded font-semibold flex items-center gap-1 shadow">
+            <span>Box Color</span>
+          </button>
+          <input type="color" id="tool-box-bg" value="#8c4e12" title="Box Background" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+          <input type="color" id="tool-box-bc" value="#ffffff" title="Box Border" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+
+          <div class="h-4 w-px bg-slate-700 mx-1"></div>
+
+          <button onmousedown="event.preventDefault()" onclick="applyOutlineStyle()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded font-semibold">
+            Outline
+          </button>
+          <input type="color" id="tool-outline-c" value="#000000" title="Outline Color" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+
+          <button onmousedown="event.preventDefault()" onclick="clearSelectedStyle()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded border border-slate-700">
+            Clear Style
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <label class="text-slate-400 text-[11px]">Size:</label>
+          <input type="number" id="gen-font-size" value="44" min="16" max="90" oninput="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs">
+          
+          <label class="text-slate-400 text-[11px]">Space:</label>
+          <input type="number" id="gen-line-spacing" value="26" min="6" max="70" oninput="adjustFontSettings()" class="w-12 bg-slate-950 border border-slate-700 rounded px-1 py-0.5 text-center text-xs">
+          
+          <label class="text-slate-400 text-[11px]">Dim:</label>
+          <input type="range" id="gen-opacity" min="0" max="90" value="45" oninput="adjustDimmer(this.value)" class="w-14">
+        </div>
+      </div>
+
+      <!-- Audio Controller -->
+      <div class="bg-slate-900/80 border border-slate-800 p-3 rounded-xl flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <button id="btn-play" onclick="togglePlay()" class="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition">
+            Play (Space)
+          </button>
+          <span id="clock" class="font-mono text-sm text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-md">
+            0.00s
+          </span>
+        </div>
+        <audio id="audio-elem" class="hidden"></audio>
+      </div>
+
+    </section>
+
+    <!-- RIGHT: Timeline Chunks & Setup Panel -->
+    <section class="flex-1 flex flex-col gap-3 overflow-hidden">
+      
+      <!-- Upload Card -->
+      <div class="bg-slate-900/60 border border-slate-800 p-3 rounded-xl flex flex-col gap-2.5 shrink-0">
+        
+        <div class="grid grid-cols-3 gap-2">
+          <input type="file" id="input-audio" accept="audio/*" class="hidden" onchange="onFileChosen('audio')">
+          <button onclick="document.getElementById('input-audio').click()" id="btn-audio-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            1. Audio (.mp3)
+          </button>
+
+          <input type="file" id="input-excel" accept=".xlsx,.xls" class="hidden" onchange="onFileChosen('excel')">
+          <button onclick="document.getElementById('input-excel').click()" id="btn-excel-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            2. Excel (.xlsx)
+          </button>
+
+          <input type="file" id="input-logo" accept="image/*" class="hidden" onchange="onFileChosen('logo')">
+          <button onclick="document.getElementById('input-logo').click()" id="btn-logo-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
+            3. Logo (Opt)
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="file" id="input-folder" webkitdirectory directory multiple class="hidden" onchange="uploadImageFolder()">
+          <button onclick="document.getElementById('input-folder').click()" id="btn-folder-choose" class="flex-1 bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg text-slate-200 border border-slate-700 truncate">
+            Images Folder
+          </button>
+
+          <button id="btn-sync-action" onclick="handleSyncAction()" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-5 py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 shrink-0">
+            Load & Auto-Match
+          </button>
+        </div>
+      </div>
+
+      <!-- Segment Timeline List -->
+      <div class="flex-1 bg-slate-900/40 border border-slate-800 rounded-xl flex flex-col overflow-hidden p-3">
+        
+        <div class="flex justify-between items-center mb-2.5 px-1 gap-2 flex-wrap">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Segments</span>
+            <span id="segment-count" class="text-xs text-indigo-400 font-mono">0 Chunks</span>
+
+            <button id="btn-match-images" onclick="triggerImageMatching()" class="bg-slate-800 hover:bg-indigo-600/80 border border-slate-700 hover:border-indigo-500 text-[10px] px-2.5 py-1 rounded-md text-slate-300 hover:text-white transition flex items-center gap-1 font-semibold">
+              Re-Match Images
+            </button>
+          </div>
+
+          <!-- Dynamic Language Selector -->
+          <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+            <span class="text-[10px] text-slate-400">Lang:</span>
+            <select id="select-target-lang" onchange="triggerTimelineTranslation()" class="bg-transparent text-xs text-indigo-400 font-semibold focus:outline-none cursor-pointer max-w-[170px] truncate">
+              <option value="" class="bg-slate-900 text-slate-500">No Excel Loaded</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="segment-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1"></div>
+      </div>
+
+      <!-- Render Action Button & Quality Selector -->
+      <div class="flex items-center gap-3 shrink-0">
+        <label class="flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-slate-800/80 transition text-xs shrink-0 select-none">
+          <input type="checkbox" id="check-enable-bgm" checked class="w-4 h-4 rounded accent-indigo-600 cursor-pointer">
+          <span class="text-slate-200 font-medium">BGM</span>
+        </label>
+
+        <select id="select-quality" class="bg-slate-900/80 border border-slate-800 text-xs text-indigo-300 font-semibold px-3 py-2.5 rounded-xl focus:outline-none">
+          <option value="720p" selected>720p (Fast Balanced)</option>
+          <option value="1080p">1080p (Full HD)</option>
+          <option value="540p">540p (Rapid Preview)</option>
+        </select>
+
+        <button id="btn-render" onclick="startRender()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30">
+          Render Video
+        </button>
+        <button id="btn-download" onclick="downloadVideo()" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-xl font-bold text-xs text-white hidden">
+          Download Video
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script type="module" src="./main.ts"></script>
+  <script>
+    let rows = [];
+    let currentIndex = 0;
+    let currentFormat = "landscape";
+    let isEditing = false;
+    let saveDebounceTimer = null;
+
+    const audioElem = document.getElementById('audio-elem');
+    const canvasTextEl = document.getElementById('canvas-text');
+    const tooltipEl = document.getElementById('canvas-original-tooltip');
+
+    // Keep the local server alive while this UI is active.
+    async function sendHeartbeat() {
+      try {
+        await fetch(API_BASE + '/api/heartbeat', {
+          method: 'POST',
+          cache: 'no-store'
+        });
+      } catch (err) {
+        console.warn('Heartbeat failed:', err.message);
+      }
+    }
+
+    sendHeartbeat();
+    setInterval(sendHeartbeat, 10000);
+
+    let appClosing = false;
+
+    async function quitApp() {
+      if (appClosing) return;
+
+      if (!confirm('Quit Dhamma Studio? An active render will be allowed to finish first.')) {
+        return;
+      }
+
+      appClosing = true;
+
+      // Hide the entire original interface permanently and show the
+      // full-screen closing page instead (body.closing hides all other
+      // body children via CSS).
+      document.body.classList.add('closing');
+
+      const iconEl = document.getElementById('closing-icon');
+      const messageEl = document.getElementById('closing-message');
+
+      function setSpinner() {
+        iconEl.classList.remove('check');
+        iconEl.classList.add('spinner');
+        iconEl.innerHTML = '';
+      }
+
+      function setCheck() {
+        iconEl.classList.remove('spinner');
+        iconEl.classList.add('check');
+        iconEl.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      }
+
+      setSpinner();
+      messageEl.textContent = 'Closing Dhamma Studio...';
+
+      let renderFinishing = false;
+      try {
+        const res = await fetch(API_BASE + '/api/shutdown', {
+          method: 'POST',
+          cache: 'no-store'
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Shutdown request failed.');
+        }
+
+        if (data.deferred) {
+          // A render is in progress. Server will shut down once it finishes.
+          renderFinishing = true;
+          messageEl.textContent = 'Please wait. Your current render is finishing...';
+        } else {
+          // Server is shutting down now. Show the final closed state shortly.
+          setTimeout(() => {
+            setCheck();
+            messageEl.textContent = 'Dhamma Studio has been closed.';
+          }, 800);
+          return;
+        }
+      } catch (err) {
+        messageEl.textContent =
+          'Shutdown request failed: ' + err.message +
+          '. Please restart the application manually if needed.';
+        return;
+      }
+
+      // If a render was in progress, poll until it completes (or the server
+      // exits), then show the final closed state with the green check.
+      if (renderFinishing) {
+        const poll = setInterval(async () => {
+          try {
+            const r = await fetch(API_BASE + '/api/status', { cache: 'no-store' });
+            if (!r.ok) throw new Error('server gone');
+            const d = await r.json();
+            if (!d.is_rendering) {
+              clearInterval(poll);
+              setCheck();
+              messageEl.textContent = 'Dhamma Studio has been closed.';
+            }
+          } catch (e) {
+            // Server has shut down (render finished and process exited).
+            clearInterval(poll);
+            setCheck();
+            messageEl.textContent = 'Dhamma Studio has been closed.';
+          }
+        }, 1000);
+      }
+    }
+
+    canvasTextEl.addEventListener('focus', () => { isEditing = true; });
+    canvasTextEl.addEventListener('blur', () => { 
+      isEditing = false; 
+      syncCanvasToMemory(); 
+    });
+
+    setInterval(async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/status', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Status request failed: ${res.status}`);
+        const data = await res.json();
+        document.getElementById('progress-bar').style.width = `${data.pct}%`;
+        document.getElementById('progress-text').innerText = `${data.pct}% - ${data.msg}`;
+        const renderBtn = document.getElementById('btn-render');
+        if (renderBtn) {
+          renderBtn.disabled = data.is_rendering;
+          renderBtn.classList.toggle('opacity-60', data.is_rendering);
+          renderBtn.classList.toggle('cursor-not-allowed', data.is_rendering);
+          renderBtn.innerText = data.is_rendering ? data.msg : 'Render Video';
+        }
+        const dlBtn = document.getElementById('btn-download');
+        if (dlBtn) {
+          if (data.pct === 100 && !data.is_rendering && data.has_video) {
+            dlBtn.classList.remove('hidden');
+          } else if (data.is_rendering) {
+            dlBtn.classList.add('hidden');
+          }
+        }
+      } catch (err) {
+        console.warn('Status polling failed:', err.message);
+      }
+    }, 1000);
+
+    function updateLanguageDropdown(languages) {
+      const select = document.getElementById('select-target-lang');
+      select.innerHTML = "";
+
+      if (!languages || languages.length === 0) {
+        select.innerHTML = `<option value="" class="bg-slate-900 text-slate-400">None</option>`;
+        return;
+      }
+
+      languages.forEach(lang => {
+        const opt = document.createElement('option');
+        opt.value = lang.code;
+        opt.className = "bg-slate-900 text-white";
+        opt.innerText = lang.label;
+        if (lang.code === 'my') {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+    }
+
+    function formatTimeSeconds(sec) {
+      if (isNaN(sec) || sec < 0) return "0.00";
+      return parseFloat(sec).toFixed(2);
+    }
+
+    async function switchVideoFormat(fmt) {
+      currentFormat = fmt;
+      const viewport = document.getElementById('video-viewport');
+      const btnLand = document.getElementById('btn-fmt-landscape');
+      const btnMob = document.getElementById('btn-fmt-mobile');
+      const fontIn = document.getElementById('gen-font-size');
+      const bgBlur = document.getElementById('canvas-bg-blur');
+      const centerBanner = document.getElementById('mobile-center-banner');
+      const standardBg = document.getElementById('canvas-bg');
+
+      if (fmt === 'mobile') {
+        viewport.className = "viewport-mobile relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950";
+        btnMob.className = "px-3 py-1 rounded bg-indigo-600 font-semibold text-white";
+        btnLand.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
+        fontIn.value = 38;
+
+        standardBg.classList.add('hidden');
+        bgBlur.classList.remove('hidden');
+        centerBanner.classList.remove('hidden');
+      } else {
+        viewport.className = "viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950";
+        btnLand.className = "px-3 py-1 rounded bg-indigo-600 font-semibold text-white";
+        btnMob.className = "px-3 py-1 rounded text-slate-400 hover:text-white";
+        fontIn.value = 44;
+
+        bgBlur.classList.add('hidden');
+        centerBanner.classList.add('hidden');
+        standardBg.classList.remove('hidden');
+      }
+      adjustFontSettings();
+
+      if (rows.length > 0) {
+        try {
+          const res = await fetch(API_BASE + '/api/switch_format', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ format: currentFormat })
+          });
+          const data = await res.json();
+          if (data.success && data.reloaded) {
+            rows = data.rows;
+            if (data.languages) updateLanguageDropdown(data.languages);
+            document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+            renderTimeline();
+            currentIndex = 0;
+          }
+        } catch(e) {}
+      }
+
+      if (rows.length > 0) selectSegment(currentIndex, false);
+    }
+
+    function onFileChosen(type) {
+      const input = document.getElementById(`input-${type}`);
+      const btn = document.getElementById(`btn-${type}-choose`);
+      if (input.files[0]) {
+        btn.innerText = `OK: ${input.files[0].name}`;
+        btn.classList.add('border-emerald-600', 'text-emerald-400');
+      }
+    }
+
+    async function uploadImageFolder() {
+      const folderInput = document.getElementById('input-folder');
+      const files = folderInput.files;
+      if (!files || files.length === 0) return;
+
+      const btn = document.getElementById('btn-folder-choose');
+      btn.innerText = `Uploading ${files.length} images...`;
+
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
+
+      const res = await fetch(API_BASE + '/api/upload_images_folder', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        btn.innerText = `${data.count} Images Ready`;
+        btn.classList.add('border-emerald-600', 'text-emerald-400');
+        
+        if (data.rows && data.rows.length > 0) {
+          rows = data.rows;
+          renderTimeline();
+          selectSegment(currentIndex, false);
+        } else if (rows.length > 0) {
+          await triggerImageMatching();
+        }
+      }
+    }
+
+    async function triggerImageMatching() {
+      if (!rows || rows.length === 0) return;
+      const matchBtn = document.getElementById('btn-match-images');
+      matchBtn.disabled = true;
+      matchBtn.innerText = "Matching...";
+
+      try {
+        const res = await fetch(API_BASE + '/api/match_images', { method: 'POST' });
+        if (!res.ok) throw new Error(`Matching failed: ${res.status}`);
+        const data = await res.json();
+        if (data.success && data.rows) {
+          rows = data.rows;
+          renderTimeline();
+          selectSegment(currentIndex, false);
+          matchBtn.innerText = "Matched";
+          matchBtn.classList.add('border-emerald-600', 'text-emerald-400');
+        } else {
+          matchBtn.innerText = "Re-Match Images";
+        }
+      } catch (e) {
+        matchBtn.innerText = "Re-Match Images";
+      } finally {
+        matchBtn.disabled = false;
+      }
+    }
+
+    async function handleSyncAction() {
+      const audioInput = document.getElementById('input-audio');
+      const excelInput = document.getElementById('input-excel');
+      const logoInput = document.getElementById('input-logo');
+      const actionBtn = document.getElementById('btn-sync-action');
+
+      if (!audioInput.files || !audioInput.files[0]) {
+        alert("Please choose an audio (.mp3) file.");
+        return;
+      }
+      if (!excelInput.files || !excelInput.files[0]) {
+        alert("Please choose an excel (.xlsx) file.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('audio', audioInput.files[0]);
+      formData.append('excel', excelInput.files[0]);
+      formData.append('format', currentFormat);
+      if (logoInput.files && logoInput.files[0]) {
+        formData.append('logo', logoInput.files[0]);
+      }
+
+      actionBtn.disabled = true;
+      actionBtn.innerHTML = `Loading Excel & Auto-Matching...`;
+
+      try {
+        const res = await fetch(API_BASE + '/api/upload_excel_sync', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+          rows = data.rows;
+          audioElem.src = API_BASE + data.audio_url;
+          document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+
+          if (data.languages) {
+            updateLanguageDropdown(data.languages);
+          }
+
+          if (data.has_logo) {
+            const logoEl = document.getElementById('logo-preview');
+            logoEl.src = API_BASE + '/api/get_logo';
+            logoEl.classList.remove('hidden');
+          }
+
+          renderTimeline();
+          selectSegment(0, false);
+
+          const hasDifferentImages = new Set(rows.map(r => r.matched_img)).size > 1;
+          if (!hasDifferentImages) {
+            await triggerImageMatching();
+          }
+        } else {
+          alert(data.error);
+        }
+      } catch (err) {
+        alert("Upload error: " + err);
+      } finally {
+        actionBtn.disabled = false;
+        actionBtn.innerHTML = "Load & Auto-Match";
+      }
+    }
+
+    async function triggerTimelineTranslation() {
+      if (!rows || rows.length === 0) return;
+      const targetLang = document.getElementById('select-target-lang').value;
+
+      try {
+        const res = await fetch(API_BASE + '/api/translate_timeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_lang: targetLang })
+        });
+        const data = await res.json();
+        if (data.success) {
+          rows = data.rows;
+          renderTimeline();
+          selectSegment(currentIndex, false);
+        }
+      } catch (err) {
+        alert("Language switch error: " + err);
+      }
+    }
+
+    function applyBoxStyle() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const text = selection.toString();
+      if (!text.trim()) return;
+
+      const bg = document.getElementById('tool-box-bg').value;
+      const bc = document.getElementById('tool-box-bc').value;
+
+      const span = document.createElement('span');
+      span.setAttribute('data-style', 'box');
+      span.setAttribute('data-bg', bg);
+      span.setAttribute('data-bc', bc);
+      span.style.backgroundColor = bg;
+      span.style.border = `2px solid ${bc}`;
+      span.style.padding = '2px 8px';
+      span.style.borderRadius = '4px';
+      span.style.display = 'inline-block';
+      span.textContent = text;
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      selection.removeAllRanges();
+      syncCanvasToMemory();
+    }
+
+    function applyOutlineStyle() {
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const text = selection.toString();
+      if (!text.trim()) return;
+
+      const c = document.getElementById('tool-outline-c').value;
+      const span = document.createElement('span');
+      span.setAttribute('data-style', 'outline');
+      span.setAttribute('data-c', c);
+      span.style.textShadow = `-2px -2px 0 ${c}, 2px -2px 0 ${c}, -2px 2px 0 ${c}, 2px 2px 0 ${c}`;
+      span.textContent = text;
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(span);
+      selection.removeAllRanges();
+      syncCanvasToMemory();
+    }
+
+    function clearSelectedStyle() {
+      canvasTextEl.innerHTML = canvasTextEl.innerText;
+      syncCanvasToMemory();
+    }
+
+    function renderTimeline() {
+      const container = document.getElementById('segment-list');
+      container.innerHTML = "";
+      rows.forEach((r, idx) => {
+        const item = document.createElement('div');
+        item.className = `p-2 rounded-lg border text-xs transition flex items-center gap-2 ${
+          idx === currentIndex ? 'bg-indigo-950/90 border-indigo-500 shadow-md ring-1 ring-indigo-500/50' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+        }`;
+
+        const caption = document.createElement('div');
+        caption.className = 'flex-1 min-w-0 cursor-pointer';
+        caption.onclick = () => selectSegment(idx, true);
+        const title = document.createElement('div');
+        title.className = 'truncate font-mm text-slate-200';
+        title.textContent = (r.caption || '').replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
+        caption.innerHTML = `<div class="font-mono text-[10px] text-indigo-400 font-bold mb-1">#${idx + 1}</div>`;
+        caption.appendChild(title);
+
+        const controls = document.createElement('div');
+        controls.className = 'flex items-center gap-1 shrink-0';
+        controls.innerHTML = `
+          <input class="segment-start w-16 bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-emerald-300" type="number" min="0" step="0.01" value="${Number(r.start_time || 0)}" title="Start time">
+          <span class="text-slate-500">-</span>
+          <input class="segment-end w-16 bg-slate-900 border border-slate-700 rounded px-1 py-1 text-[10px] text-amber-300" type="number" min="0" step="0.01" value="${Number(r.end_time || 0)}" title="End time">
+          <button class="save-segment bg-emerald-700 hover:bg-emerald-600 rounded px-2 py-1 text-[10px]">Save</button>
+          <button class="delete-segment bg-red-700 hover:bg-red-600 rounded px-2 py-1 text-[10px]">Delete</button>
+        `;
+
+        controls.querySelector('.save-segment').onclick = async (e) => {
+          e.stopPropagation();
+          const startTime = Number(controls.querySelector('.segment-start').value);
+          const endTime = Number(controls.querySelector('.segment-end').value);
+          if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime < 0 || endTime <= startTime) {
+            alert('Invalid time. End time must be greater than start time.');
+            return;
+          }
+          try {
+            const res = await fetch(API_BASE + '/api/update_row', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({index: idx, start_time: startTime, end_time: endTime, caption: r.caption}) });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Update failed');
+            rows[idx] = data.row;
+            renderTimeline();
+            selectSegment(Math.min(currentIndex, rows.length - 1), false);
+          } catch (err) { alert(err.message); }
+        };
+
+        controls.querySelector('.delete-segment').onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete statement #${idx + 1}?`)) return;
+          try {
+            const res = await fetch(API_BASE + '/api/delete_row', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({index: idx}) });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || 'Delete failed');
+            rows = data.rows || rows.filter((_, i) => i !== idx);
+            currentIndex = Math.max(0, Math.min(currentIndex, rows.length - 1));
+            document.getElementById('segment-count').innerText = `${rows.length} Chunks`;
+            renderTimeline();
+            if (rows.length) selectSegment(currentIndex, false);
+            else canvasTextEl.innerHTML = '';
+          } catch (err) { alert(err.message); }
+        };
+
+        item.appendChild(caption);
+        item.appendChild(controls);
+        container.appendChild(item);
+      });
+    }
+
+    function adjustFontSettings() {
+      const sz = parseInt(document.getElementById('gen-font-size').value) || 44;
+      const sp = parseInt(document.getElementById('gen-line-spacing').value) || 26;
+      const el = document.getElementById('canvas-text');
+
+      if (currentFormat === 'mobile') {
+        const previewSz = Math.max(12, Math.round(sz * 0.38));
+        const previewSp = Math.max(4, Math.round(sp * 0.38));
+        el.style.fontSize = `${previewSz}px`;
+        el.style.lineHeight = `${previewSz + previewSp}px`;
+        el.style.maxWidth = '260px';
+      } else {
+        const previewSz = Math.max(14, Math.round(sz * 0.5));
+        const previewSp = Math.max(6, Math.round(sp * 0.5));
+        el.style.fontSize = `${previewSz}px`;
+        el.style.lineHeight = `${previewSz + previewSp}px`;
+        el.style.maxWidth = '88%';
+      }
+    }
+
+    function selectSegment(idx, triggerPlay = false) {
+      if (!rows || rows.length === 0) return;
+      currentIndex = idx;
+      renderTimeline();
+      const r = rows[idx];
+
+      if (!isEditing) {
+        // Gentle fade-out, content swap, then fade-in.
+        canvasTextEl.classList.remove('caption-fade-in');
+        canvasTextEl.classList.add('caption-fade-out');
+        window.clearTimeout(window.__captionFadeTimer);
+        window.__captionFadeTimer = window.setTimeout(() => {
+          canvasTextEl.innerHTML = r.caption || "";
+          adjustFontSettings();
+          canvasTextEl.classList.remove('caption-fade-out');
+          canvasTextEl.classList.add('caption-fade-in');
+        }, 260);
+      }
+
+      if (tooltipEl) {
+        tooltipEl.innerText = `Original: ${r.original_text || '-'}`;
+      }
+      
+      if (audioElem.src && !isNaN(r.start_time)) {
+        audioElem.currentTime = r.start_time;
+        if (triggerPlay) {
+          audioElem.play();
+          const btn = document.getElementById('btn-play');
+          btn.innerText = "Pause";
+          btn.className = "px-5 py-2 rounded-lg bg-amber-600 text-white font-semibold text-xs";
+        }
+      }
+
+      const canvasBg = document.getElementById('canvas-bg');
+      const canvasBgBlur = document.getElementById('canvas-bg-blur');
+      const canvasBgCenter = document.getElementById('canvas-bg-center');
+
+      if (r.matched_img) {
+        const imgUrl = API_BASE + r.matched_img;
+        canvasBg.src = imgUrl;
+        canvasBgBlur.src = imgUrl;
+        canvasBgCenter.src = imgUrl;
+
+        if (currentFormat === 'mobile') {
+          canvasBg.classList.add('hidden');
+          canvasBgBlur.classList.remove('hidden');
+          document.getElementById('mobile-center-banner').classList.remove('hidden');
+        } else {
+          canvasBg.classList.remove('hidden');
+          canvasBgBlur.classList.add('hidden');
+          document.getElementById('mobile-center-banner').classList.add('hidden');
+        }
+      } else {
+        canvasBg.classList.add('hidden');
+        canvasBgBlur.classList.add('hidden');
+        document.getElementById('mobile-center-banner').classList.add('hidden');
+      }
+
+      adjustFontSettings();
+    }
+
+    function syncCanvasToMemory() {
+      if (!rows[currentIndex]) return;
+      const content = canvasTextEl.innerHTML;
+      // Keep manual edits (including deleted punctuation) in the client rows.
+      rows[currentIndex].caption = content;
+      
+      const cleanTxt = content.replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
+      const listItems = document.querySelectorAll('#segment-list .font-mm');
+      if (listItems[currentIndex]) {
+        listItems[currentIndex].innerText = cleanTxt;
+      }
+
+      clearTimeout(saveDebounceTimer);
+      saveDebounceTimer = setTimeout(async () => {
+        try {
+          await fetch(API_BASE + '/api/update_row', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rows[currentIndex])
+          });
+        } catch(e) {}
+      }, 400);
+    }
+
+    function adjustDimmer(val) {
+      document.getElementById('canvas-dimmer').style.backgroundColor = `rgba(0, 0, 0, ${val / 100})`;
+    }
+
+    function togglePlay() {
+      const btn = document.getElementById('btn-play');
+      if (audioElem.paused) {
+        audioElem.play();
+        btn.innerText = "Pause";
+        btn.className = "px-5 py-2 rounded-lg bg-amber-600 text-white font-semibold text-xs";
+      } else {
+        audioElem.pause();
+        btn.innerText = "Play (Space)";
+        btn.className = "px-5 py-2 rounded-lg bg-emerald-600 text-white font-semibold text-xs";
+      }
+    }
+
+    audioElem.ontimeupdate = () => {
+      const sec = audioElem.currentTime;
+      document.getElementById('clock').innerText = `${formatTimeSeconds(sec)}s`;
+
+      if (rows[currentIndex]) {
+        if (!isEditing && sec >= rows[currentIndex].end_time && currentIndex < rows.length - 1) {
+          selectSegment(currentIndex + 1, false);
+        }
+      }
+    };
+
+    async function startRender() {
+      const renderBtn = document.getElementById('btn-render');
+      if (renderBtn?.disabled) return;
+      const dlBtn = document.getElementById('btn-download');
+      if (dlBtn) dlBtn.classList.add('hidden');
+      if (renderBtn) {
+        renderBtn.disabled = true;
+        renderBtn.innerText = 'Starting render...';
+      }
+
+      syncCanvasToMemory();
+
+      const qualityVal = document.getElementById('select-quality')?.value || "720p";
+      const formData = new FormData();
+      formData.append('format', currentFormat);
+      formData.append('quality', qualityVal);
+      formData.append('font_size', document.getElementById('gen-font-size').value);
+      formData.append('line_spacing', document.getElementById('gen-line-spacing').value);
+      formData.append('opacity', document.getElementById('gen-opacity').value);
+      formData.append('enable_bgm', document.getElementById('check-enable-bgm').checked);
+      formData.append('target_lang', document.getElementById('select-target-lang')?.value || '');
+      formData.append('rows_json', JSON.stringify(rows));
+
+      const res = await fetch(API_BASE + '/api/start_render', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!data.success) {
+        if (renderBtn) {
+          renderBtn.disabled = false;
+          renderBtn.innerText = 'Render Video';
+        }
+        alert(data.error);
+      }
+    }
+
+    function downloadVideo() {
+      window.location.href = API_BASE + '/api/download_video';
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.id === 'canvas-text' || e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      }
+    });
+  </script>
+
+  <div id="closing-page">
+    <div class="brand">Dhamma Studio</div>
+    <div id="closing-icon" class="closing-icon spinner"></div>
+    <p id="closing-message">Closing Dhamma Studio...</p>
+  </div>
+</body>
+</html>

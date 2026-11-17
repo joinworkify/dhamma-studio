@@ -25,6 +25,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import openpyxl
 
@@ -166,6 +167,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Dhamma Studio", lifespan=lifespan)
+# The Electrobun desktop shell serves the UI from views:// and calls this
+# local API cross-origin. The server only binds to 127.0.0.1.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+)
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/fonts", StaticFiles(directory=FONTS_DIR), name="fonts")
 
@@ -710,5 +721,9 @@ if __name__ == "__main__":
     )
     _server = uvicorn.Server(config)
 
-    threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
+    # Machine-readable line so the Electrobun shell knows the chosen port.
+    print(f"DHAMMA_STUDIO_PORT={port}", flush=True)
+
+    if os.environ.get("DHAMMA_NO_BROWSER") != "1":
+        threading.Thread(target=_open_browser, args=(port,), daemon=True).start()
     _server.run()
