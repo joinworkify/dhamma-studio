@@ -141,6 +141,6 @@ if sys.platform == "darwin":
         bundle_identifier="com.joinworkify.dhammastudio",
         info_plist={
             "NSHighResolutionCapable": True,
-            "CFBundleShortVersionString": "0.1.0",
+            "CFBundleShortVersionString": "0.3.0",
         },
     )
