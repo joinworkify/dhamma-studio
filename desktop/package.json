@@ -1,0 +1,14 @@
+{
+	"name": "dhamma-studio-desktop",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "Dhamma Studio desktop shell (Electrobun + Vite)",
+	"devDependencies": {
+		"@types/bun": "latest",
+		"concurrently": "^9.2.5",
+		"typescript": "~5.9.3",
+		"vite": "^7.3.7",
+		"tailwindcss": "^4.1.0",
+		"@tailwindcss/vite": "^4.1.0"
+	}
+}

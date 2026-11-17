@@ -254,3 +254,17 @@ This project is intended for the Dhamma Studio video-generation workflow.
 
 ```
 ```
+
+## Desktop app (Electrobun)
+
+`desktop/` is an [Electrobun](https://electrobun.dev) shell: the UI is a Vite + Tailwind page bundled
+into the app (`views://`), and the Python backend (`server.py`) runs as a sidecar the shell spawns.
+
+```bash
+./scripts/build_mac.sh          # build the PyInstaller backend into dist/DhammaStudio
+export PATH="$HOME/.hutch/bin:$PATH"
+cd desktop
+hutch install
+hutch run dev                   # dev run (uses the bundled sidecar if dist/DhammaStudio exists)
+hutch run build                 # artifacts/macos-arm64-DhammaStudio.dmg
+```
