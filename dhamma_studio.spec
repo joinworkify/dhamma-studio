@@ -1,4 +1,6 @@
+
 # -*- mode: python ; coding: utf-8 -*-
+
 import sys
 from pathlib import Path
 
@@ -10,26 +12,45 @@ APP_NAME = "Dhamma Studio"
 ICON_ICNS = "assets/icon.icns"
 ICON_ICO = "assets/icon.ico"
 
-# Read-only resources that the application needs at runtime.
+# Read-only resources required at runtime.
 datas = [
     ("static", "static"),
     ("fonts", "fonts"),
     ("assets", "assets"),
 ]
 
-# Bundled CLIP model (offline use). Created by scripts/fetch_clip_model.py.
+# Bundled CLIP model (offline use).
 clip_dir = Path("vendor/models/clip-ViT-B-32")
+
 if clip_dir.exists():
     datas.append((str(clip_dir), "models/clip-ViT-B-32"))
 else:
-    print(f"INFO: {clip_dir} not found. The CLIP model will download on first run.")
+    print(
+        f"INFO: {clip_dir} not found. "
+        "The CLIP model will download on first run."
+    )
 
 binaries = []
 hiddenimports = []
 
+# Bundle FriBiDi DLL for Windows Myanmar text rendering.
+if sys.platform == "win32":
+    fribidi_dll = Path(
+        "runtime/windows/x64/libfribidi-0.dll"
+    )
+
+    if fribidi_dll.exists():
+        binaries.append((
+            str(fribidi_dll),
+            "runtime/windows/x64"
+        ))
+        print(f"INFO: Bundling FriBiDi DLL: {fribidi_dll}")
+    else:
+        raise FileNotFoundError(
+            f"Required FriBiDi DLL not found: {fribidi_dll}"
+        )
+
 # Optional bundled FFmpeg.
-# Windows/macOS fetch scripts place FFmpeg under vendor/ffmpeg/<platform>/.
-# Linux can use the system ffmpeg from PATH unless a bundled binary is present.
 if sys.platform == "darwin":
     ffmpeg_src = Path("vendor/ffmpeg/mac/ffmpeg")
 elif sys.platform == "win32":
@@ -45,8 +66,7 @@ else:
         "The application will use ffmpeg from PATH at runtime."
     )
 
-# Sentence Transformers / Torch contain dynamic imports, native libraries,
-# and package data that PyInstaller may not discover automatically.
+# Collect Sentence Transformers and Torch dependencies.
 for pkg in (
     "sentence_transformers",
     "transformers",
@@ -56,10 +76,12 @@ for pkg in (
     "scipy",
 ):
     pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
+
     datas += pkg_datas
     binaries += pkg_binaries
     hiddenimports += pkg_hiddenimports
 
+# Analyze application.
 a = Analysis(
     ["server.py"],
     pathex=[],
@@ -74,8 +96,13 @@ a = Analysis(
     cipher=block_cipher,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=block_cipher
+)
 
+# Build executable.
 exe = EXE(
     pyz,
     a.scripts,
@@ -86,7 +113,6 @@ exe = EXE(
     strip=False,
     upx=False,
     console=True,
-    # Apple Silicon only on macOS (ignored on other platforms).
     target_arch="arm64" if sys.platform == "darwin" else None,
     icon=(
         ICON_ICO
@@ -95,6 +121,7 @@ exe = EXE(
     ),
 )
 
+# Collect application files.
 coll = COLLECT(
     exe,
     a.binaries,
@@ -105,6 +132,7 @@ coll = COLLECT(
     name=APP_NAME.replace(" ", ""),
 )
 
+# macOS application bundle.
 if sys.platform == "darwin":
     app = BUNDLE(
         coll,
