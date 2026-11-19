@@ -1099,6 +1099,117 @@ def get_resolution(
 # RENDER ALL CLIPS
 # ============================================================
 
+TRANSITION_FPS = 25
+
+
+def encode_transition_clips(
+    jobs,
+    temp_dir,
+    width,
+    height,
+    transition,
+    progress_cb
+):
+    """
+    Turn each baked caption frame into a short animated mp4 clip.
+
+    fade: dip-to-black fade out/in at every scene change.
+    zoom: slow push-in (Ken Burns) plus fade.
+    """
+
+    fps = TRANSITION_FPS
+    done = {"n": 0}
+    total = len(jobs)
+
+    # Upscale before zoompan so the slow zoom stays smooth, not jittery.
+    pre = 2.0 if width * height <= 1280 * 720 else 1.3
+    pre_w = int(width * pre) // 2 * 2
+    pre_h = int(height * pre) // 2 * 2
+
+    def encode(job):
+
+        idx, seg_file, n_frames = job
+
+        out = temp_dir / f"clip_{idx}.mp4"
+
+        dur = n_frames / fps
+        fade_d = max(0.08, min(0.35, dur * 0.3))
+        fade_out_start = max(0.0, dur - fade_d)
+
+        fades = (
+            f"fade=t=in:st=0:d={fade_d:.3f},"
+            f"fade=t=out:st={fade_out_start:.3f}:d={fade_d:.3f}"
+        )
+
+        if transition == "zoom":
+
+            zoom_step = 0.06 / max(1, n_frames)
+
+            vf = (
+                f"scale={pre_w}:{pre_h},"
+                f"zoompan=z='1+{zoom_step:.6f}*on'"
+                f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+                f":d={n_frames}:s={width}x{height}:fps={fps},"
+                f"{fades},format=yuv420p"
+            )
+
+            in_args = ["-i", str(seg_file)]
+
+        else:
+
+            vf = f"{fades},format=yuv420p"
+
+            in_args = [
+                "-loop", "1",
+                "-framerate", str(fps),
+                "-i", str(seg_file)
+            ]
+
+        cmd = [
+            FFMPEG_BIN,
+            "-y",
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel", "error",
+            *in_args,
+            "-vf", vf,
+            "-frames:v", str(n_frames),
+            "-r", str(fps),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            "-an",
+            str(out)
+        ]
+
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True
+        )
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Transition clip {idx} failed: {proc.stderr[-400:]}"
+            )
+
+        done["n"] += 1
+
+        progress_cb(
+            f"Animating scenes {done['n']}/{total}...",
+            46 + int(done["n"] / total * 4)
+        )
+
+        return out
+
+    with ThreadPoolExecutor(
+        max_workers=min(4, os.cpu_count() or 2)
+    ) as pool:
+
+        return list(pool.map(encode, jobs))
+
+
 def render_all_clips(
     df,
     media_dir,
@@ -1164,6 +1275,16 @@ def render_all_clips(
         opacity = int(
             cfg.get("opacity", 45)
         )
+
+        transition = str(
+            cfg.get("transition", "fade")
+        ).lower().strip()
+
+        if transition not in ("none", "fade", "zoom"):
+            transition = "fade"
+
+        scene_jobs = []
+        timeline_acc = 0.0
 
         font_path = resolve_font_path(
             target_lang=target_lang
@@ -1270,13 +1391,31 @@ def render_all_clips(
                     quality=92
                 )
 
-                f_out.write(
-                    f"file '{str(seg_file.resolve()).replace(chr(92), '/')}'\n"
-                )
+                if transition == "none":
 
-                f_out.write(
-                    f"duration {dur:.3f}\n"
-                )
+                    f_out.write(
+                        f"file '{str(seg_file.resolve()).replace(chr(92), '/')}'\n"
+                    )
+
+                    f_out.write(
+                        f"duration {dur:.3f}\n"
+                    )
+
+                else:
+
+                    # Frame counts come from cumulative time so rounding
+                    # never drifts away from the narration audio.
+                    n_frames = max(
+                        2,
+                        round((timeline_acc + dur) * TRANSITION_FPS)
+                        - round(timeline_acc * TRANSITION_FPS)
+                    )
+
+                    timeline_acc += dur
+
+                    scene_jobs.append(
+                        (idx, seg_file, n_frames)
+                    )
 
                 if idx % 3 == 0 or idx == total_rows - 1:
 
@@ -1293,7 +1432,7 @@ def render_all_clips(
                         pct
                     )
 
-            if total_rows > 0:
+            if total_rows > 0 and transition == "none":
 
                 last_seg = (
                     temp_dir
@@ -1303,6 +1442,34 @@ def render_all_clips(
                 f_out.write(
                     f"file '{str(last_seg.resolve()).replace(chr(92), '/')}'\n"
                 )
+
+        if scene_jobs:
+
+            progress_cb(
+                f"Animating {len(scene_jobs)} scene transitions...",
+                46
+            )
+
+            clip_files = encode_transition_clips(
+                scene_jobs,
+                temp_dir,
+                width,
+                height,
+                transition,
+                progress_cb
+            )
+
+            with open(
+                concat_txt,
+                "w",
+                encoding="utf-8"
+            ) as f_out:
+
+                for clip in clip_files:
+
+                    f_out.write(
+                        f"file '{str(clip.resolve()).replace(chr(92), '/')}'\n"
+                    )
 
         total_duration = max(
             1.0,
@@ -1396,14 +1563,16 @@ def render_all_clips(
             audio_map,
             "-t",
             f"{total_duration:.3f}",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "22",
-            "-pix_fmt",
-            "yuv420p",
+            *(
+                ["-c:v", "copy"]
+                if scene_jobs
+                else [
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-crf", "22",
+                    "-pix_fmt", "yuv420p",
+                ]
+            ),
             "-c:a",
             "aac",
             "-b:a",

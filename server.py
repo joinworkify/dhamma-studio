@@ -1,4 +1,35 @@
 import os
+import sys
+
+
+def _ensure_fribidi_macos():
+    """Pillow's RAQM (needed for Myanmar shaping) dlopens libfribidi at
+    import time and only honours DYLD_FALLBACK_LIBRARY_PATH set at process
+    launch. Without it Pillow silently falls back to basic layout and
+    Myanmar text in exported videos renders with broken glyph order.
+    Re-exec once with the path pointing at a bundled/Homebrew libfribidi."""
+    if sys.platform != "darwin" or os.environ.get("_DS_FRIBIDI_SET"):
+        return
+    from pathlib import Path
+
+    here = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    for d in (
+        here / "runtime" / "mac",
+        Path("/opt/homebrew/lib"),
+        Path("/usr/local/lib"),
+    ):
+        if (d / "libfribidi.dylib").exists():
+            env = dict(os.environ)
+            env["_DS_FRIBIDI_SET"] = "1"
+            # Lets a frozen PyInstaller app safely re-launch itself.
+            env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+            old = env.get("DYLD_FALLBACK_LIBRARY_PATH", "")
+            env["DYLD_FALLBACK_LIBRARY_PATH"] = f"{d}:{old}" if old else str(d)
+            os.execve(sys.executable, [sys.executable] + sys.argv, env)
+
+
+_ensure_fribidi_macos()
+
 import re
 import json
 import shutil
@@ -568,6 +599,7 @@ async def start_render(
     opacity: int = Form(45),
     enable_bgm: bool = Form(True),
     target_lang: str = Form("my"),
+    transition: str = Form("fade"),
     rows_json: Optional[str] = Form(None)
 ):
     # Reserve the render slot before validating or preparing any render data.
@@ -614,7 +646,8 @@ async def start_render(
                     "line_spacing": line_spacing,
                     "opacity": opacity,
                     "enable_bgm": enable_bgm,
-                    "target_lang": selected_lang
+                    "target_lang": selected_lang,
+                    "transition": transition
                 }
 
                 success, res = video_engine.render_all_clips(

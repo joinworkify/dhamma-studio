@@ -121,7 +121,7 @@ async function getMainViewUrl(): Promise<string> {
 }
 
 const mainWindow = new BrowserWindow({
-	title: "Dhamma Studio",
+	title: "Dhamma Studio — by joinworkify",
 	url: await getMainViewUrl(),
 	frame: { width: 1360, height: 900, x: 120, y: 80 },
 });

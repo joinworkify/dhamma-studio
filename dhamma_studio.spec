@@ -1,3 +1,4 @@
+import shutil
 
 # -*- mode: python ; coding: utf-8 -*-
 
@@ -49,6 +50,23 @@ if sys.platform == "win32":
         raise FileNotFoundError(
             f"Required FriBiDi DLL not found: {fribidi_dll}"
         )
+
+# Bundle libfribidi for macOS (Pillow RAQM -> correct Myanmar shaping).
+if sys.platform == "darwin":
+    for _p in (
+        Path("/opt/homebrew/lib/libfribidi.0.dylib"),
+        Path("/usr/local/lib/libfribidi.0.dylib"),
+    ):
+        if _p.exists():
+            # Pillow dlopens the *unversioned* name "libfribidi.dylib".
+            _fb = Path("build/fribidi/libfribidi.dylib")
+            _fb.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(_p.resolve(), _fb)
+            binaries.append((str(_fb), "runtime/mac"))
+            print(f"INFO: Bundling FriBiDi dylib: {_p}")
+            break
+    else:
+        raise FileNotFoundError("Run: brew install fribidi")
 
 # Optional bundled FFmpeg.
 if sys.platform == "darwin":
@@ -141,6 +159,6 @@ if sys.platform == "darwin":
         bundle_identifier="com.joinworkify.dhammastudio",
         info_plist={
             "NSHighResolutionCapable": True,
-            "CFBundleShortVersionString": "0.4.0",
+            "CFBundleShortVersionString": "0.4.1",
         },
     )

@@ -31,6 +31,40 @@
     #canvas-text.caption-fade-out { opacity: 0; }
     #canvas-text.caption-fade-in { opacity: 1; }
 
+    /* Scene-change animations (match the exported video) */
+    #bg-layer { position:absolute; inset:0; z-index:0; }
+    #bg-layer.anim-fade { animation: bgFade 600ms ease-out; }
+    #bg-layer.anim-zoom { animation: bgZoom 1400ms cubic-bezier(.2,.7,.2,1); }
+    @keyframes bgFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes bgZoom { from { opacity: .2; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
+    #canvas-text { transform: translateY(0); }
+    #canvas-text.caption-fade-out { transform: translateY(6px); }
+    #canvas-text.caption-fade-in { transition: opacity 550ms ease-in-out, transform 550ms cubic-bezier(.2,.7,.2,1); }
+    @media (prefers-reduced-motion: reduce) { #bg-layer, #canvas-text { animation: none !important; transition: none !important; } }
+
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
+    button { transition: background-color .15s, border-color .15s, color .15s, transform .1s, opacity .15s; }
+    button:active:not(:disabled) { transform: scale(.97); }
+    button:disabled { cursor: not-allowed; }
+
+    /* Toasts */
+    #toast-stack { position: fixed; right: 16px; bottom: 16px; z-index: 99999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { pointer-events: auto; max-width: 340px; padding: 10px 14px; border-radius: 10px; font-size: 12px; color: #fff;
+      background: #1e293b; border: 1px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: toastIn .25s ease-out; }
+    .toast.error { background: #7f1d1d; border-color: #b91c1c; }
+    .toast.success { background: #064e3b; border-color: #059669; }
+    .toast.out { opacity: 0; transform: translateX(20px); transition: all .25s; }
+    @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+    /* Step badges */
+    .step-num { display:inline-flex; width:16px; height:16px; border-radius:9999px; background:#334155; color:#cbd5e1;
+      align-items:center; justify-content:center; font-size:10px; font-weight:700; margin-right:6px; flex-shrink:0; }
+    .step-done .step-num { background:#059669; color:#fff; }
+    .pulse-hint { animation: pulseHint 1.6s ease-in-out infinite; }
+    @keyframes pulseHint { 0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,.55); } 50% { box-shadow: 0 0 0 7px rgba(99,102,241,0); } }
+    #segment-list > div { animation: itemIn .25s ease-out; }
+    @keyframes itemIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
     /* Full-screen closing page (replaces the original UI) */
     #closing-page {
       position: fixed;
@@ -122,6 +156,7 @@
       <div class="flex-1 bg-black rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-2xl p-2">
         <div id="video-viewport" class="viewport-landscape relative overflow-hidden rounded-xl border border-slate-800 flex items-center justify-center bg-slate-950">
           
+          <div id="bg-layer">
           <img id="canvas-bg-blur" class="absolute inset-0 w-full h-full object-cover filter blur-md brightness-50 z-0 hidden" alt="Blurred BG">
           
           <div id="mobile-center-banner" class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[52%] border-y border-white/20 overflow-hidden z-10 hidden flex items-center justify-center">
@@ -130,9 +165,16 @@
           </div>
 
           <img id="canvas-bg" class="absolute inset-0 w-full h-full object-cover z-0 hidden" alt="Background">
+          </div>
           <div id="canvas-dimmer" class="absolute inset-0 bg-[#00000073] z-10 transition-colors pointer-events-none"></div>
           <img id="logo-preview" class="absolute top-4 right-5 w-16 h-16 object-contain z-30 hidden" alt="Logo">
           
+          <div id="viewport-empty" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 text-center text-slate-400 pointer-events-none px-8">
+            <div class="text-3xl">🎬</div>
+            <p class="text-sm font-semibold text-slate-200">Start in the right panel</p>
+            <p class="text-xs">Add audio + Excel, then press <b class="text-indigo-300">Load &amp; Auto-Match</b></p>
+          </div>
+
           <div class="relative z-30 group flex flex-col items-center justify-center w-full px-6">
             <div id="canvas-text" 
                  contenteditable="true" 
@@ -153,7 +195,8 @@
       <!-- Word Styler Toolbar -->
       <div class="bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl flex items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-2">
-          <span class="text-[11px] font-bold text-indigo-400 uppercase">Style:</span>
+          <span class="text-[11px] font-bold text-indigo-400 uppercase" title="Select words in the subtitle on the canvas first, then click a style">Style:</span>
+          <span class="text-[10px] text-slate-500 hidden xl:inline">(select words first)</span>
           
           <button onmousedown="event.preventDefault()" onclick="applyBoxStyle()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded font-semibold flex items-center gap-1 shadow">
             <span>Box Color</span>
@@ -194,7 +237,10 @@
           <span id="clock" class="font-mono text-sm text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-md">
             0.00s
           </span>
+          <button onclick="stepSegment(-1)" title="Previous segment (←)" class="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200">◀</button>
+          <button onclick="stepSegment(1)" title="Next segment (→)" class="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200">▶</button>
         </div>
+        <span class="text-[10px] text-slate-500 hidden lg:inline">Space play · ← → segments</span>
         <audio id="audio-elem" class="hidden"></audio>
       </div>
 
@@ -209,28 +255,28 @@
         <div class="grid grid-cols-3 gap-2">
           <input type="file" id="input-audio" accept="audio/*" class="hidden" onchange="onFileChosen('audio')">
           <button onclick="document.getElementById('input-audio').click()" id="btn-audio-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
-            1. Audio (.mp3)
+            <span class="step-num">1</span>Audio (.mp3)
           </button>
 
           <input type="file" id="input-excel" accept=".xlsx,.xls" class="hidden" onchange="onFileChosen('excel')">
           <button onclick="document.getElementById('input-excel').click()" id="btn-excel-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
-            2. Excel (.xlsx)
+            <span class="step-num">2</span>Excel (.xlsx)
           </button>
 
           <input type="file" id="input-logo" accept="image/*" class="hidden" onchange="onFileChosen('logo')">
           <button onclick="document.getElementById('input-logo').click()" id="btn-logo-choose" class="bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg border border-slate-700 text-slate-200 truncate">
-            3. Logo (Opt)
+            <span class="step-num">3</span>Logo (optional)
           </button>
         </div>
 
         <div class="flex items-center gap-2">
           <input type="file" id="input-folder" webkitdirectory directory multiple class="hidden" onchange="uploadImageFolder()">
           <button onclick="document.getElementById('input-folder').click()" id="btn-folder-choose" class="flex-1 bg-slate-800 hover:bg-slate-700 text-xs py-2 px-3 rounded-lg text-slate-200 border border-slate-700 truncate">
-            Images Folder
+            <span class="step-num">4</span>Images Folder
           </button>
 
-          <button id="btn-sync-action" onclick="handleSyncAction()" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-5 py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 shrink-0">
-            Load & Auto-Match
+          <button id="btn-sync-action" title="Needs audio + Excel" onclick="handleSyncAction()" class="bg-indigo-600 hover:bg-indigo-500 text-xs px-5 py-2 rounded-lg text-white font-semibold transition disabled:opacity-50 shrink-0">
+            Load &amp; Auto-Match
           </button>
         </div>
       </div>
@@ -258,6 +304,9 @@
         </div>
 
         <div id="segment-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1"></div>
+        <div id="segment-empty" class="flex-1 flex items-center justify-center text-center text-xs text-slate-500 px-6">
+          Segments from your Excel will appear here.<br>Click one to jump to it and edit its subtitle.
+        </div>
       </div>
 
       <!-- Render Action Button & Quality Selector -->
@@ -267,13 +316,19 @@
           <span class="text-slate-200 font-medium">BGM</span>
         </label>
 
+        <select id="select-transition" title="Animation between scenes (preview and export)" class="bg-slate-900/80 border border-slate-800 text-xs text-indigo-300 font-semibold px-3 py-2.5 rounded-xl focus:outline-none">
+          <option value="fade" selected>✨ Fade</option>
+          <option value="zoom">🔍 Zoom + Fade</option>
+          <option value="none">⏹ No animation</option>
+        </select>
+
         <select id="select-quality" class="bg-slate-900/80 border border-slate-800 text-xs text-indigo-300 font-semibold px-3 py-2.5 rounded-xl focus:outline-none">
           <option value="720p" selected>720p (Fast Balanced)</option>
           <option value="1080p">1080p (Full HD)</option>
           <option value="540p">540p (Rapid Preview)</option>
         </select>
 
-        <button id="btn-render" onclick="startRender()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30">
+        <button id="btn-render" disabled title="Load Excel + audio first" onclick="startRender()" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 py-3 rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/30 disabled:opacity-40">
           Render Video
         </button>
         <button id="btn-download" onclick="downloadVideo()" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-3 rounded-xl font-bold text-xs text-white hidden">
@@ -296,6 +351,51 @@
     const canvasTextEl = document.getElementById('canvas-text');
     const tooltipEl = document.getElementById('canvas-original-tooltip');
 
+    function toast(msg, kind = 'info', ms = 3800) {
+      let stack = document.getElementById('toast-stack');
+      if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'toast-stack';
+        document.body.appendChild(stack);
+      }
+      const el = document.createElement('div');
+      el.className = 'toast ' + kind;
+      el.textContent = msg;
+      stack.appendChild(el);
+      setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 280); }, ms);
+    }
+
+    function updateReadyState() {
+      const has = rows && rows.length > 0;
+      const empty = document.getElementById('viewport-empty');
+      if (empty) empty.style.display = has ? 'none' : 'flex';
+      const segEmpty = document.getElementById('segment-empty');
+      const list = document.getElementById('segment-list');
+      if (segEmpty) segEmpty.style.display = has ? 'none' : 'flex';
+      if (list) list.style.display = has ? '' : 'none';
+      const rb = document.getElementById('btn-render');
+      if (rb && !rb.dataset.busy) rb.disabled = !has;
+      const sync = document.getElementById('btn-sync-action');
+      const a = document.getElementById('input-audio').files.length;
+      const x = document.getElementById('input-excel').files.length;
+      if (sync) sync.classList.toggle('pulse-hint', a && x && !has);
+    }
+
+    function stepSegment(d) {
+      if (!rows.length) return;
+      const n = Math.max(0, Math.min(rows.length - 1, currentIndex + d));
+      selectSegment(n, !audioElem.paused);
+    }
+
+    function playSceneAnimation() {
+      const layer = document.getElementById('bg-layer');
+      const mode = document.getElementById('select-transition')?.value || 'fade';
+      layer.classList.remove('anim-fade', 'anim-zoom');
+      if (mode === 'none') return;
+      void layer.offsetWidth;
+      layer.classList.add('anim-' + mode);
+    }
+
     // Keep the local server alive while this UI is active.
     async function sendHeartbeat() {
       try {
@@ -308,6 +408,7 @@
       }
     }
 
+    updateReadyState();
     sendHeartbeat();
     setInterval(sendHeartbeat, 10000);
 
@@ -416,10 +517,13 @@
         document.getElementById('progress-text').innerText = `${data.pct}% - ${data.msg}`;
         const renderBtn = document.getElementById('btn-render');
         if (renderBtn) {
-          renderBtn.disabled = data.is_rendering;
+          renderBtn.dataset.busy = data.is_rendering ? '1' : '';
+          renderBtn.disabled = data.is_rendering || !(rows && rows.length);
           renderBtn.classList.toggle('opacity-60', data.is_rendering);
           renderBtn.classList.toggle('cursor-not-allowed', data.is_rendering);
           renderBtn.innerText = data.is_rendering ? data.msg : 'Render Video';
+          if (!data.is_rendering && renderBtn.dataset.wasRendering) { toast('Video ready — click Download.', 'success'); }
+          renderBtn.dataset.wasRendering = data.is_rendering ? '1' : '';
         }
         const dlBtn = document.getElementById('btn-download');
         if (dlBtn) {
@@ -516,9 +620,10 @@
       const input = document.getElementById(`input-${type}`);
       const btn = document.getElementById(`btn-${type}-choose`);
       if (input.files[0]) {
-        btn.innerText = `OK: ${input.files[0].name}`;
-        btn.classList.add('border-emerald-600', 'text-emerald-400');
+        btn.innerHTML = `<span class="step-num">✓</span>${input.files[0].name.replace(/</g,'&lt;')}`;
+        btn.classList.add('border-emerald-600', 'text-emerald-400', 'step-done');
       }
+      updateReadyState();
     }
 
     async function uploadImageFolder() {
@@ -583,11 +688,11 @@
       const actionBtn = document.getElementById('btn-sync-action');
 
       if (!audioInput.files || !audioInput.files[0]) {
-        alert("Please choose an audio (.mp3) file.");
+        toast("Step 1: choose an audio (.mp3) file.", "error");
         return;
       }
       if (!excelInput.files || !excelInput.files[0]) {
-        alert("Please choose an excel (.xlsx) file.");
+        toast("Step 2: choose an Excel (.xlsx) file.", "error");
         return;
       }
 
@@ -622,16 +727,18 @@
 
           renderTimeline();
           selectSegment(0, false);
+          updateReadyState();
+          toast(`Loaded ${rows.length} segments.`, 'success');
 
           const hasDifferentImages = new Set(rows.map(r => r.matched_img)).size > 1;
           if (!hasDifferentImages) {
             await triggerImageMatching();
           }
         } else {
-          alert(data.error);
+          toast(data.error || "Load failed", "error");
         }
       } catch (err) {
-        alert("Upload error: " + err);
+        toast("Upload error: " + err, "error");
       } finally {
         actionBtn.disabled = false;
         actionBtn.innerHTML = "Load & Auto-Match";
@@ -655,7 +762,7 @@
           selectSegment(currentIndex, false);
         }
       } catch (err) {
-        alert("Language switch error: " + err);
+        toast("Language switch error: " + err, "error");
       }
     }
 
@@ -744,7 +851,7 @@
           const startTime = Number(controls.querySelector('.segment-start').value);
           const endTime = Number(controls.querySelector('.segment-end').value);
           if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime < 0 || endTime <= startTime) {
-            alert('Invalid time. End time must be greater than start time.');
+            toast('End time must be greater than start time.', 'error');
             return;
           }
           try {
@@ -754,7 +861,7 @@
             rows[idx] = data.row;
             renderTimeline();
             selectSegment(Math.min(currentIndex, rows.length - 1), false);
-          } catch (err) { alert(err.message); }
+          } catch (err) { toast(err.message, 'error'); }
         };
 
         controls.querySelector('.delete-segment').onclick = async (e) => {
@@ -770,13 +877,15 @@
             renderTimeline();
             if (rows.length) selectSegment(currentIndex, false);
             else canvasTextEl.innerHTML = '';
-          } catch (err) { alert(err.message); }
+          } catch (err) { toast(err.message, 'error'); }
         };
 
         item.appendChild(caption);
         item.appendChild(controls);
         container.appendChild(item);
+        if (idx === currentIndex) requestAnimationFrame(() => item.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
       });
+      updateReadyState();
     }
 
     function adjustFontSettings() {
@@ -831,6 +940,8 @@
           btn.className = "px-5 py-2 rounded-lg bg-amber-600 text-white font-semibold text-xs";
         }
       }
+
+      playSceneAnimation();
 
       const canvasBg = document.getElementById('canvas-bg');
       const canvasBgBlur = document.getElementById('canvas-bg-blur');
@@ -930,6 +1041,7 @@
       formData.append('font_size', document.getElementById('gen-font-size').value);
       formData.append('line_spacing', document.getElementById('gen-line-spacing').value);
       formData.append('opacity', document.getElementById('gen-opacity').value);
+      formData.append('transition', document.getElementById('select-transition')?.value || 'fade');
       formData.append('enable_bgm', document.getElementById('check-enable-bgm').checked);
       formData.append('target_lang', document.getElementById('select-target-lang')?.value || '');
       formData.append('rows_json', JSON.stringify(rows));
@@ -941,7 +1053,9 @@
           renderBtn.disabled = false;
           renderBtn.innerText = 'Render Video';
         }
-        alert(data.error);
+        toast(data.error || 'Render failed to start', 'error');
+      } else {
+        toast('Rendering started…', 'info');
       }
     }
 
@@ -951,6 +1065,8 @@
 
     window.addEventListener('keydown', (e) => {
       if (e.target.id === 'canvas-text' || e.target.tagName === 'INPUT') return;
+      if (e.code === 'ArrowRight') { e.preventDefault(); stepSegment(1); return; }
+      if (e.code === 'ArrowLeft') { e.preventDefault(); stepSegment(-1); return; }
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();
