@@ -7,7 +7,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.hutch/bin:$PATH"
 
+# Stage timing. NOTE: "hutch run build" ends with Electrobun zstd-compressing
+# the whole .app (~2 GB tar, level 19, single thread) for the auto-update
+# artifact. That step alone takes ~8-10 min and is not needed for a DMG.
+T0=$SECONDS
+mark() { echo "[$(date +%H:%M:%S)] $1 (elapsed $((SECONDS - T0))s)"; }
+trap 'mark "done/exit"' EXIT
+
+mark "hutch build start (vite + electrobun + zstd)"
 hutch run build
+mark "hutch build finished"
 
 APP="build/stable-macos-arm64/Dhamma Studio.app"
 if [ -z "${ELECTROBUN_DEVELOPER_ID:-}" ]; then
