@@ -1059,8 +1059,32 @@
       }
     }
 
-    function downloadVideo() {
-      window.location.href = '/api/download_video';
+    async function downloadVideo() {
+      // Browser: normal download. Desktop app: the webview can't download
+      // (navigating to the file replaces the UI and kills the heartbeat),
+      // so the backend saves the file via a native dialog instead.
+      const base = (typeof API_BASE !== 'undefined') ? API_BASE : '';
+      if (!base) {
+        const a = document.createElement('a');
+        a.href = '/api/download_video';
+        a.download = 'dhamma_video.mp4';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return;
+      }
+      const btn = document.getElementById('btn-download');
+      btn.disabled = true;
+      try {
+        const res = await fetch(base + '/api/save_video', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) toast('Saved: ' + data.path, 'success', 7000);
+        else if (!data.cancelled) toast(data.error || 'Save failed', 'error');
+      } catch (err) {
+        toast('Save failed: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     window.addEventListener('keydown', (e) => {

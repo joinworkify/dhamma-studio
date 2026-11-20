@@ -693,6 +693,78 @@ async def download_video():
     return JSONResponse({"error": "Video not ready."}, status_code=404)
 
 
+def _unique_path(directory: Path, name: str) -> Path:
+    target = directory / name
+    stem, suffix, n = target.stem, target.suffix, 1
+    while target.exists():
+        target = directory / f"{stem} ({n}){suffix}"
+        n += 1
+    return target
+
+
+def _pick_save_path(default_name: str) -> Optional[str]:
+    """Native save dialog (macOS). Returns None if cancelled, "" if unsupported."""
+    import subprocess
+
+    if sys.platform != "darwin":
+        return ""
+    script = (
+        'POSIX path of (choose file name with prompt "Save video" '
+        f'default name "{default_name}" '
+        'default location (path to downloads folder))'
+    )
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", script], capture_output=True, text=True
+        )
+    except Exception:
+        return ""
+    if proc.returncode != 0:
+        return None if "-128" in proc.stderr else ""
+    return proc.stdout.strip()
+
+
+@app.post("/api/save_video")
+async def save_video():
+    """Desktop app: the webview cannot download files, so save from the backend."""
+    src = SESSION.get("last_video")
+    if not src or not os.path.exists(src):
+        return JSONResponse({"success": False, "error": "Video not ready."}, status_code=404)
+
+    default_name = "dhamma_video.mp4"
+    loop = asyncio.get_running_loop()
+    chosen = await loop.run_in_executor(None, _pick_save_path, default_name)
+
+    if chosen is None:
+        return {"success": False, "cancelled": True}
+
+    if chosen:
+        dest = Path(chosen)
+        if dest.suffix.lower() != ".mp4":
+            dest = dest.with_suffix(".mp4")
+    else:
+        downloads = Path.home() / "Downloads"
+        downloads.mkdir(parents=True, exist_ok=True)
+        dest = _unique_path(downloads, default_name)
+
+    try:
+        shutil.copyfile(src, dest)
+    except OSError as exc:
+        return JSONResponse({"success": False, "error": f"Could not save: {exc}"}, status_code=500)
+
+    # Reveal in Finder / Explorer (best effort).
+    try:
+        import subprocess
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(dest)])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", "/select,", str(dest)])
+    except Exception:
+        pass
+
+    return {"success": True, "path": str(dest)}
+
+
 @app.get("/api/get_image/{filename}")
 async def get_image(filename: str):
     safe_name = Path(filename).name

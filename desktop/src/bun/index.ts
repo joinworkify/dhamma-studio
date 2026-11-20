@@ -120,6 +120,13 @@ async function getMainViewUrl(): Promise<string> {
 	return `views://mainview/index.html${query}`;
 }
 
+// The backend auto-exits if heartbeats stop (browser-tab use case). In the
+// desktop app the main process owns the lifecycle, so keep it alive from here
+// regardless of what the webview is doing (hidden, throttled, or navigated).
+setInterval(() => {
+	fetch(`${apiBase}/api/heartbeat`, { method: "POST" }).catch(() => {});
+}, 10_000);
+
 const mainWindow = new BrowserWindow({
 	title: "Dhamma Studio — by joinworkify",
 	url: await getMainViewUrl(),
