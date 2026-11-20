@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import sys
 import warnings
+import threading
 
 from pathlib import Path
 from collections import Counter
@@ -150,17 +151,172 @@ _CLIP_MODEL = None
 # CLIP MODEL
 # ============================================================
 
+CLIP_REPO = "sentence-transformers/clip-ViT-B-32"
+CLIP_DOWNLOAD_BYTES = 606_700_000  # approx. size, used only for progress %
+CLIP_DOWNLOAD_DIR = APP_DATA_DIR / "models" / "clip-ViT-B-32"
+
+_CLIP_STATUS = {"state": "missing", "pct": 0, "msg": "AI image model not downloaded"}
+_CLIP_LOCK = threading.Lock()
+
+
+def _clip_dir_valid(path: Path) -> bool:
+    """A usable SentenceTransformer folder with full-size weights."""
+
+    try:
+
+        if not (path / "modules.json").exists():
+            return False
+
+        weights = list(path.rglob("model.safetensors"))
+
+        return bool(weights) and max(
+            w.stat().st_size for w in weights
+        ) > 500_000_000
+
+    except OSError:
+        return False
+
+
+def clip_model_path():
+    """Bundled model (if any), else the downloaded one, else None."""
+
+    for candidate in (
+        BASE_DIR / "models" / "clip-ViT-B-32",
+        CLIP_DOWNLOAD_DIR,
+    ):
+        if _clip_dir_valid(candidate):
+            return candidate
+
+    return None
+
+
+def clip_model_ready() -> bool:
+    return clip_model_path() is not None
+
+
+def get_clip_model_status():
+
+    if clip_model_ready():
+        return {"state": "ready", "pct": 100, "msg": "AI image model ready"}
+
+    with _CLIP_LOCK:
+        return dict(_CLIP_STATUS)
+
+
+def _dir_bytes(path: Path) -> int:
+
+    total = 0
+
+    try:
+        for f in path.rglob("*"):
+            try:
+                if f.is_file():
+                    total += f.stat().st_size
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+    return total
+
+
+def start_clip_download():
+    """Download the CLIP model in the background (resumable, idempotent)."""
+
+    if clip_model_ready():
+        return False
+
+    with _CLIP_LOCK:
+
+        if _CLIP_STATUS["state"] == "downloading":
+            return False
+
+        _CLIP_STATUS.update(
+            state="downloading",
+            pct=0,
+            msg="Downloading AI image model (~600 MB)..."
+        )
+
+    def worker():
+
+        done = threading.Event()
+
+        def watch():
+
+            while not done.is_set():
+
+                pct = min(
+                    99,
+                    int(_dir_bytes(CLIP_DOWNLOAD_DIR) / CLIP_DOWNLOAD_BYTES * 100)
+                )
+
+                with _CLIP_LOCK:
+                    _CLIP_STATUS.update(
+                        pct=pct,
+                        msg=f"Downloading AI image model... {pct}%"
+                    )
+
+                done.wait(1.0)
+
+        threading.Thread(target=watch, daemon=True).start()
+
+        try:
+
+            from huggingface_hub import snapshot_download
+
+            CLIP_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+            snapshot_download(
+                repo_id=CLIP_REPO,
+                local_dir=str(CLIP_DOWNLOAD_DIR),
+                ignore_patterns=[
+                    "*pytorch_model.bin",
+                    "README.md",
+                    ".gitattributes"
+                ]
+            )
+
+            if not _clip_dir_valid(CLIP_DOWNLOAD_DIR):
+                raise RuntimeError("Downloaded model files look incomplete.")
+
+            global _CLIP_MODEL
+            _CLIP_MODEL = None
+
+            with _CLIP_LOCK:
+                _CLIP_STATUS.update(
+                    state="ready",
+                    pct=100,
+                    msg="AI image model ready"
+                )
+
+        except Exception as exc:
+
+            with _CLIP_LOCK:
+                _CLIP_STATUS.update(
+                    state="error",
+                    pct=0,
+                    msg=f"Model download failed: {str(exc)[:160]}"
+                )
+
+        finally:
+            done.set()
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    return True
+
+
 def get_clip_model():
     global _CLIP_MODEL
 
     if _CLIP_MODEL is None:
-        bundled = BASE_DIR / "models" / "clip-ViT-B-32"
 
-        _CLIP_MODEL = SentenceTransformer(
-            str(bundled)
-            if bundled.exists()
-            else "clip-ViT-B-32"
-        )
+        path = clip_model_path()
+
+        if path is None:
+            raise RuntimeError("AI image model is not downloaded yet.")
+
+        _CLIP_MODEL = SentenceTransformer(str(path))
 
     return _CLIP_MODEL
 
@@ -317,6 +473,10 @@ def scan_and_index_images(media_files, progress_cb=None):
     if not current_valid_paths:
         return [], None
 
+    if not clip_model_ready():
+        # Model not downloaded yet: caller falls back to even spacing.
+        return current_valid_paths, None
+
     cached_dict = {}
 
     if cache_file.exists():
@@ -409,6 +569,20 @@ def scan_and_index_images(media_files, progress_cb=None):
 # HYBRID IMAGE MATCHING
 # ============================================================
 
+def spread_images(valid_paths, count):
+    """Spread images evenly across the timeline in filename order."""
+
+    if not valid_paths or count <= 0:
+        return []
+
+    n = len(valid_paths)
+
+    return [
+        valid_paths[min(n - 1, i * n // count)]
+        for i in range(count)
+    ]
+
+
 def batch_match_images_hybrid(
     clip_queries,
     valid_paths,
@@ -421,10 +595,7 @@ def batch_match_images_hybrid(
         return [Path() for _ in clip_queries]
 
     if image_embeddings is None:
-        return [
-            valid_paths[i % len(valid_paths)]
-            for i in range(len(clip_queries))
-        ]
+        return spread_images(valid_paths, len(clip_queries))
 
     model = get_clip_model()
 

@@ -4,6 +4,28 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# --- stage timing: prints elapsed per stage and warns when one runs long ---
+SECONDS=0
+_STAGE_START=0
+_STAGE_NAME=""
+SLOW_WARN_SECS="${SLOW_WARN_SECS:-300}"   # warn if a stage exceeds 5 min
+_end_stage() {
+    if [ -n "$_STAGE_NAME" ]; then
+        local took=$((SECONDS - _STAGE_START))
+        local flag=""
+        [ "$took" -gt "$SLOW_WARN_SECS" ] && flag="  <-- SLOW (> ${SLOW_WARN_SECS}s)"
+        echo "    [time] ${_STAGE_NAME}: ${took}s${flag}"
+    fi
+}
+stage() {
+    _end_stage
+    _STAGE_NAME="$1"
+    _STAGE_START=$SECONDS
+    echo
+    echo "[$(date +%H:%M:%S)] $1"
+}
+trap '_end_stage; echo "    [time] total: ${SECONDS}s"' EXIT
+
 echo "=== Dhamma Studio macOS Build ==="
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -31,30 +53,26 @@ if [ ! -f "static/index.html" ]; then
     exit 1
 fi
 
-echo
-echo "[1/6] Fetching bundled FFmpeg..."
+stage "[1/6] Fetching bundled FFmpeg..."
 ./scripts/fetch_ffmpeg_mac.sh
 
-echo
-echo "[2/6] Syncing Python dependencies..."
+stage "[2/6] Syncing Python dependencies..."
 uv sync --group build
 
-echo
-echo "[3/6] Bundling CLIP model for offline use..."
-uv run python scripts/fetch_clip_model.py
+stage "[3/6] CLIP model (downloaded by the app on first launch; BUNDLE_CLIP=1 to bundle)"
+if [ "${BUNDLE_CLIP:-0}" = "1" ]; then
+    uv run python scripts/fetch_clip_model.py
+fi
 
-echo
-echo "[4/6] Cleaning previous build..."
+stage "[4/6] Cleaning previous build..."
 rm -rf build dist
 
-echo
-echo "[5/6] Running PyInstaller..."
+stage "[5/6] Running PyInstaller..."
 uv run pyinstaller dhamma_studio.spec --noconfirm --clean
 
 APP_PATH="dist/Dhamma Studio.app"
 
-echo
-echo "[6/6] Checking build output..."
+stage "[6/6] Checking build output..."
 if [ -d "$APP_PATH" ]; then
     echo
     echo "BUILD SUCCESSFUL"

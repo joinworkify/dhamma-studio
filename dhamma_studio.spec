@@ -2,6 +2,7 @@ import shutil
 
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 import sys
 from pathlib import Path
 
@@ -20,16 +21,15 @@ datas = [
     ("assets", "assets"),
 ]
 
-# Bundled CLIP model (offline use).
+# The CLIP model is NOT bundled (keeps the installer ~400 MB smaller); the app
+# downloads it on first launch. Set BUNDLE_CLIP=1 to bundle it for offline builds.
 clip_dir = Path("vendor/models/clip-ViT-B-32")
 
-if clip_dir.exists():
+if os.environ.get("BUNDLE_CLIP") == "1" and clip_dir.exists():
     datas.append((str(clip_dir), "models/clip-ViT-B-32"))
+    print(f"INFO: Bundling CLIP model from {clip_dir}")
 else:
-    print(
-        f"INFO: {clip_dir} not found. "
-        "The CLIP model will download on first run."
-    )
+    print("INFO: CLIP model not bundled; it downloads on first launch.")
 
 binaries = []
 hiddenimports = []

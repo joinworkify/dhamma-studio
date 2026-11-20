@@ -187,6 +187,8 @@ async def _shutdown_watchdog() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     watchdog_task = asyncio.create_task(_shutdown_watchdog())
+    if not os.environ.get("DHAMMA_NO_MODEL_DOWNLOAD"):
+        video_engine.start_clip_download()
     try:
         yield
     finally:
@@ -385,7 +387,16 @@ def auto_match_all_images():
         valid_imgs, progress_cb=set_progress
     )
 
-    if not SESSION["cached_images"] or SESSION["image_embeddings"] is None:
+    if not SESSION["cached_images"]:
+        return
+
+    if SESSION["image_embeddings"] is None:
+        # AI model not downloaded yet: spread images evenly instead.
+        targets = [i for i, r in enumerate(SESSION["rows"]) if not r.get("is_manual_img")]
+        spread = video_engine.spread_images(SESSION["cached_images"], len(targets))
+        for row_idx, img_p in zip(targets, spread):
+            SESSION["rows"][row_idx]["matched_img"] = f"/api/get_image/{img_p.name}"
+        set_progress("AI model not ready - images spread evenly. Re-Match once it finishes downloading.", 100)
         return
 
     clip_query_texts, indices = [], []
@@ -458,8 +469,15 @@ async def get_status():
         "pct": SESSION["progress_pct"],
         "is_rendering": SESSION["is_rendering"],
         "total_rows": len(SESSION["rows"]),
-        "has_video": bool(SESSION["last_video"] and os.path.exists(SESSION["last_video"]))
+        "has_video": bool(SESSION["last_video"] and os.path.exists(SESSION["last_video"])),
+        "model": video_engine.get_clip_model_status(),
     }
+
+
+@app.post("/api/model_download")
+async def model_download():
+    started = video_engine.start_clip_download()
+    return {"success": True, "started": started, "model": video_engine.get_clip_model_status()}
 
 
 @app.post("/api/upload_images_folder")

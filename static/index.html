@@ -133,6 +133,11 @@
         <button id="btn-fmt-mobile" onclick="switchVideoFormat('mobile')" class="px-3 py-1 rounded text-slate-400 hover:text-white">Mobile Shorts (9:16)</button>
       </div>
 
+      <div id="model-chip" class="hidden items-center gap-2 text-[11px] bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-full text-slate-300" title="Optional AI model for automatic image matching">
+        <span id="model-chip-text">AI model</span>
+        <button id="model-chip-retry" onclick="retryModelDownload()" class="hidden underline text-indigo-300 hover:text-indigo-200">Retry</button>
+      </div>
+
       <div class="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-full w-80">
         <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
           <div id="progress-bar" class="bg-indigo-500 h-full transition-all duration-300 w-0"></div>
@@ -513,6 +518,7 @@
         const res = await fetch('/api/status', { cache: 'no-store' });
         if (!res.ok) throw new Error(`Status request failed: ${res.status}`);
         const data = await res.json();
+        updateModelChip(data.model);
         document.getElementById('progress-bar').style.width = `${data.pct}%`;
         document.getElementById('progress-text').innerText = `${data.pct}% - ${data.msg}`;
         const renderBtn = document.getElementById('btn-render');
@@ -537,6 +543,34 @@
         console.warn('Status polling failed:', err.message);
       }
     }, 1000);
+
+
+    // --- AI image model (downloaded on first launch) ---
+    let lastModelState = null;
+    async function retryModelDownload() {
+      try {
+        await fetch('' + '/api/model_download', { method: 'POST' });
+      } catch (e) {}
+    }
+    function updateModelChip(model) {
+      const chip = document.getElementById('model-chip');
+      const text = document.getElementById('model-chip-text');
+      const retry = document.getElementById('model-chip-retry');
+      if (!chip || !model) return;
+      if (model.state === 'ready') {
+        if (lastModelState && lastModelState !== 'ready') {
+          toast('AI image model ready — click "Re-Match Images" for smarter matching.', 'success', 7000);
+        }
+        chip.classList.add('hidden'); chip.classList.remove('flex');
+      } else {
+        chip.classList.remove('hidden'); chip.classList.add('flex');
+        text.textContent = model.state === 'downloading'
+          ? `⬇ AI image model ${model.pct}% (first launch only)`
+          : model.state === 'error' ? '⚠ ' + model.msg : 'AI image model not downloaded';
+        retry.classList.toggle('hidden', model.state === 'downloading');
+      }
+      lastModelState = model.state;
+    }
 
     function updateLanguageDropdown(languages) {
       const select = document.getElementById('select-target-lang');
