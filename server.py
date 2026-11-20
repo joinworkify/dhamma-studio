@@ -513,6 +513,16 @@ async def upload_excel_sync(
             logo_path = UPLOAD_DIR / logo.filename
             with open(logo_path, "wb") as f:
                 shutil.copyfileobj(logo.file, f)
+            # Remove white corners/halo so preview and export both look clean.
+            try:
+                from PIL import Image as _Image
+                cleaned = video_engine.clean_logo_edges(
+                    _Image.open(logo_path).convert("RGBA")
+                )
+                logo_path = UPLOAD_DIR / (Path(logo.filename).stem + "_clean.png")
+                cleaned.save(logo_path, "PNG")
+            except Exception:
+                pass
             SESSION["logo_path"] = str(logo_path)
         else:
             SESSION["logo_path"] = ""

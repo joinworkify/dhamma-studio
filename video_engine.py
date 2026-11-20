@@ -782,6 +782,123 @@ def wrap_caption_items(
 # VIDEO FRAME RENDERING
 # ============================================================
 
+def _strip_white_border_background(img):
+    """
+    Make near-white pixels that connect to the image corners transparent.
+
+    Fixes logos whose "transparent" corners are really opaque (or almost
+    opaque) white. White that is enclosed by the artwork is left alone.
+    """
+
+    import numpy as np
+
+    w, h = img.size
+    arr = np.asarray(img, dtype=np.uint8)
+
+    near_white = (
+        (arr[..., 0] >= 235)
+        & (arr[..., 1] >= 235)
+        & (arr[..., 2] >= 235)
+        & (arr[..., 3] >= 40)
+    )
+
+    if not near_white.any():
+        return img
+
+    # Flood fill from the four corners through near-white pixels
+    # (numpy dilation; avoids relying on ImageDraw.floodfill behaviour).
+    bg = np.zeros_like(near_white)
+
+    for cy, cx in ((0, 0), (0, w - 1), (h - 1, 0), (h - 1, w - 1)):
+        if near_white[cy, cx]:
+            bg[cy, cx] = True
+
+    if not bg.any():
+        return img
+
+    for _ in range(max(w, h)):
+
+        grown = bg.copy()
+        grown[1:, :] |= bg[:-1, :]
+        grown[:-1, :] |= bg[1:, :]
+        grown[:, 1:] |= bg[:, :-1]
+        grown[:, :-1] |= bg[:, 1:]
+        grown &= near_white
+
+        if (grown == bg).all():
+            break
+
+        bg = grown
+
+    out = arr.copy()
+    out[bg, 3] = 0
+
+    return Image.fromarray(out, "RGBA")
+
+
+def clean_logo_edges(logo_img):
+    """
+    Remove the white/light halo around transparent logos.
+
+    Many exported PNGs keep white RGB under their anti-aliased edge pixels
+    (white matte). After compositing, that shows as light corners on
+    rounded-square logos. Re-colour every non-solid pixel from the nearest
+    solid pixel and tighten the faint alpha fringe.
+    """
+
+    try:
+        import numpy as np
+
+        logo_img = _strip_white_border_background(logo_img.convert("RGBA"))
+
+        arr = np.asarray(logo_img.convert("RGBA"), dtype=np.float32)
+        rgb = arr[..., :3].copy()
+        alpha = arr[..., 3]
+
+        if alpha.min() >= 250:
+            return logo_img  # fully opaque: nothing to clean
+
+        solid = (alpha >= 250).astype(np.float32)
+
+        if solid.sum() < 16:
+            return logo_img
+
+        def blur(a):
+            # 3x3 box blur using shifted sums
+            p = np.pad(a, [(1, 1), (1, 1)] + [(0, 0)] * (a.ndim - 2))
+            out = np.zeros_like(a)
+            for dy in range(3):
+                for dx in range(3):
+                    out += p[dy:dy + a.shape[0], dx:dx + a.shape[1]]
+            return out / 9.0
+
+        filled = rgb * solid[..., None]
+        weight = solid.copy()
+
+        # Bleed solid colours outward across the semi-transparent fringe.
+        for _ in range(4):
+            num = blur(filled)
+            den = blur(weight)
+            grow = (weight < 1.0) & (den > 1e-4)
+            new_rgb = num / np.maximum(den, 1e-4)[..., None]
+            filled[grow] = new_rgb[grow]
+            weight[grow] = 1.0
+
+        out_rgb = np.where(solid[..., None] > 0, rgb, filled)
+
+        # Squash the faint fringe so near-transparent pixels vanish.
+        a_norm = alpha / 255.0
+        new_alpha = np.clip((a_norm ** 2.0) * 255.0, 0, 255)
+        new_alpha = np.where(alpha >= 250, alpha, new_alpha)
+
+        out = np.dstack([out_rgb, new_alpha]).clip(0, 255).astype(np.uint8)
+
+        return Image.fromarray(out, "RGBA")
+
+    except Exception:
+        return logo_img
+
+
 def build_final_segment_frame(
     bg_path,
     width,
@@ -887,15 +1004,17 @@ def build_final_segment_frame(
 
         try:
 
-            logo_img = Image.open(
-                logo_path
-            ).convert("RGBA")
+            logo_img = clean_logo_edges(
+                Image.open(
+                    logo_path
+                ).convert("RGBA")
+            )
 
             logo_size = int(height * 0.08)
 
             logo_img.thumbnail(
                 (logo_size, logo_size),
-                Image.Resampling.BILINEAR
+                Image.Resampling.LANCZOS
             )
 
             pos_x = (
