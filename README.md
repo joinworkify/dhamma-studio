@@ -47,6 +47,30 @@ Dhamma Studio helps users prepare caption timelines, automatically match backgro
 - Modern web browser
 - Internet connection for initial dependency and model downloads
 
+## Install the macOS app (no malware prompt)
+
+Dhamma Studio is not yet signed with an Apple Developer ID, so a normal browser
+download shows *"Apple could not verify Dhamma Studio is free of malware"*.
+Install with this one-liner instead. Files fetched with `curl` carry no
+quarantine flag, so macOS does not show the prompt:
+
+```bash
+curl -fsSL https://github.com/joinworkify/dhamma-studio/releases/latest/download/install-mac.sh | bash
+```
+
+(Apple Silicon only. You can read the script first: `scripts/install-mac.sh`.)
+
+Already downloaded the DMG in a browser? Run once:
+`xattr -cr "/Applications/Dhamma Studio.app"`
+
+### Removing the warning for good (maintainers)
+
+Needs a paid Apple Developer account. Create a *Developer ID Application*
+certificate, then build with `ELECTROBUN_DEVELOPER_ID`, `ELECTROBUN_APPLEID`,
+`ELECTROBUN_APPLEIDPASS` (app-specific password) and `ELECTROBUN_TEAMID` set.
+`desktop/electrobun.config.ts` already turns on code signing and notarization
+when those variables exist.
+
 ## Installation
 
 ### 1. Clone the Repository
