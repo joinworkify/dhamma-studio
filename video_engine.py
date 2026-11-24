@@ -362,6 +362,12 @@ def resolve_font_path(target_lang: str = "my"):
             Path("/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"),
             Path("/usr/share/fonts/truetype/takao-gothic/TakaoPGothic.ttf"),
             BASE_DIR / "fonts" / "NotoSansJP-Regular.ttf",
+            Path("/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc"),
+            Path("/System/Library/Fonts/ヒラギノ角ゴシック W5.ttc"),
+            Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+            Path("/Library/Fonts/Arial Unicode.ttf"),
+            Path("C:/Windows/Fonts/YuGothB.ttc"),
+            Path("C:/Windows/Fonts/meiryob.ttc"),
             Path("C:/Windows/Fonts/msgothic.ttc"),
         ]
 
@@ -371,6 +377,10 @@ def resolve_font_path(target_lang: str = "my"):
             Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
             Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
             BASE_DIR / "fonts" / "NotoSansSC-Regular.ttf",
+            Path("/System/Library/Fonts/PingFang.ttc"),
+            Path("/System/Library/Fonts/STHeiti Medium.ttc"),
+            Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+            Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
             Path("C:/Windows/Fonts/msyh.ttc"),
         ]
 
@@ -380,6 +390,9 @@ def resolve_font_path(target_lang: str = "my"):
             Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
             Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
             BASE_DIR / "fonts" / "NotoSansKR-Regular.ttf",
+            Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
+            Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+            Path("C:/Windows/Fonts/malgunbd.ttf"),
             Path("C:/Windows/Fonts/malgun.ttf"),
         ]
 
@@ -390,6 +403,8 @@ def resolve_font_path(target_lang: str = "my"):
             Path("/usr/share/fonts/truetype/thai/Loma.ttf"),
             Path("/usr/share/fonts/truetype/tlwg/Loma.ttf"),
             BASE_DIR / "fonts" / "NotoSansThai-Regular.ttf",
+            Path("/System/Library/Fonts/ThonburiUI.ttc"),
+            Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
             Path("C:/Windows/Fonts/leelawad.ttf"),
         ]
 
@@ -400,6 +415,9 @@ def resolve_font_path(target_lang: str = "my"):
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
             Path("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"),
             Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+            Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+            Path("/System/Library/Fonts/Helvetica.ttc"),
+            Path("C:/Windows/Fonts/arialbd.ttf"),
             Path("C:/Windows/Fonts/arial.ttf"),
         ]
 
@@ -423,6 +441,8 @@ def resolve_font_path(target_lang: str = "my"):
     fallback_candidates = [
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
         Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+        Path("C:/Windows/Fonts/arial.ttf"),
     ]
 
     for path in fallback_candidates:
@@ -430,6 +450,130 @@ def resolve_font_path(target_lang: str = "my"):
             return str(path.resolve())
 
     return ""
+
+
+# Pick the font from the text itself (not only the language dropdown), so a line in
+# Japanese / Chinese / Korean / Thai / Arabic / Hindi / ... is never drawn with the
+# Myanmar font (which shows empty boxes for those scripts).
+_SCRIPT_RANGES = [
+    ("my", [(0x1000, 0x109F), (0xA9E0, 0xA9FF), (0xAA60, 0xAA7F)]),
+    ("ja", [(0x3040, 0x30FF), (0x31F0, 0x31FF), (0xFF66, 0xFF9F)]),
+    ("ko", [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)]),
+    ("th", [(0x0E00, 0x0E7F)]),
+    ("han", [(0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0x3000, 0x303F), (0xFF00, 0xFFEF)]),
+    ("other", [(0x0590, 0x08FF), (0x0900, 0x0DFF), (0x0E80, 0x0FFF), (0x1780, 0x17FF), (0x1800, 0x18AF)]),
+]
+_FONT_PATH_CACHE = {}
+
+
+def detect_script(text: str) -> str:
+    counts = {}
+    for ch in str(text or ""):
+        cp = ord(ch)
+        if cp < 0x0250:
+            continue
+        for name, ranges in _SCRIPT_RANGES:
+            if any(lo <= cp <= hi for lo, hi in ranges):
+                counts[name] = counts.get(name, 0) + 1
+                break
+    if not counts:
+        return "latin"
+    # kana in a line means Japanese even when it also contains kanji
+    for name in ("my", "ja", "ko", "th"):
+        if name in counts:
+            return name
+    return max(counts, key=counts.get)
+
+
+def pick_font_path_for_text(text: str, lang_hint: str, default_path: str) -> str:
+    script = detect_script(text)
+    if script == "latin":
+        return default_path
+    hint = (lang_hint or "my").lower()
+    if script == "han":
+        script = "zh" if ("zh" in hint or "cn" in hint or "tw" in hint) else ("ko" if "ko" in hint else "ja")
+    if script == "other":
+        script = "universal"
+    key = script
+    if key not in _FONT_PATH_CACHE:
+        if script == "my":
+            path = resolve_font_path("my")
+        elif script == "universal":
+            path = resolve_font_path("xx-universal")
+            # prefer a font with broad coverage
+            for p in ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "/Library/Fonts/Arial Unicode.ttf",
+                      "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "C:/Windows/Fonts/arialuni.ttf"):
+                if os.path.exists(p):
+                    path = p
+                    break
+        else:
+            path = resolve_font_path(script)
+        _FONT_PATH_CACHE[key] = path or default_path
+    return _FONT_PATH_CACHE[key]
+
+
+
+# ============================================================
+# LETTER SPACING (keeps Myanmar / Thai / Indic clusters together)
+# ============================================================
+
+import unicodedata
+
+
+def _text_clusters(text):
+    """Split into drawable clusters: a base character plus its combining marks / stacked consonants."""
+
+    clusters = []
+
+    for ch in str(text or ""):
+
+        attach = (
+            clusters
+            and (
+                unicodedata.category(ch).startswith("M")
+                or clusters[-1][-1:] == "\u1039"
+                or ch in ("\u200d", "\u200c")
+            )
+        )
+
+        if attach:
+            clusters[-1] += ch
+        else:
+            clusters.append(ch)
+
+    return clusters
+
+
+def spaced_text_width(draw, text, font, letter_spacing):
+
+    if not text:
+        return 0
+
+    if not letter_spacing:
+        box = draw.textbbox((0, 0), text, font=font)
+        return box[2] - box[0]
+
+    parts = _text_clusters(text)
+
+    return int(
+        sum(font.getlength(p) for p in parts)
+        + letter_spacing * max(0, len(parts) - 1)
+    )
+
+
+def draw_spaced(draw, xy, text, letter_spacing, **kwargs):
+
+    if not letter_spacing:
+        draw.text(xy, text, **kwargs)
+        return
+
+    x, y = xy
+    font = kwargs.get("font")
+
+    for part in _text_clusters(text):
+        draw.text((x, y), part, **kwargs)
+        x += font.getlength(part) + letter_spacing
+
 
 
 # ============================================================
@@ -708,6 +852,24 @@ def parse_html_tokens(html_content: str):
         flags=re.I
     )
 
+    # A whole-segment style wrapper (data-seg) opens on the first line and closes on the last;
+    # give every line its own copy so each wrapped line gets its own box / outline.
+    seg = re.match(
+        r'^\s*<span\b([^>]*?)\bdata-seg=["\']1["\']([^>]*)>(.*)</span>\s*$',
+        raw,
+        flags=re.S | re.I
+    )
+
+    if seg:
+
+        attrs = (seg.group(1) + seg.group(2)).strip()
+
+        raw = "\n".join(
+            f'<span {attrs} data-seg="1">{piece}</span>'
+            for piece in seg.group(3).split("\n")
+            if piece.strip()
+        )
+
     raw_lines = raw.split("\n")
     parsed_lines = []
 
@@ -771,7 +933,8 @@ def parse_html_tokens(html_content: str):
                     "text": clean_txt,
                     "style": "box",
                     "bg": bg,
-                    "bc": bc
+                    "bc": bc,
+                    "seg": "data-seg=" in line_str
                 })
                 continue
 
@@ -830,23 +993,24 @@ def wrap_caption_items(
     parsed_lines,
     draw,
     font,
-    max_width
+    max_width,
+    letter_spacing=0
 ):
 
     wrapped = []
+    cur = [None]
 
     def text_width(value):
 
         if not value:
             return 0
 
-        box = draw.textbbox(
-            (0, 0),
+        return spaced_text_width(
+            draw,
             value,
-            font=font
+            cur[0],
+            letter_spacing
         )
-
-        return box[2] - box[0]
 
     def split_piece(piece):
 
@@ -937,12 +1101,15 @@ def wrap_caption_items(
 
         for explicit_line in original.splitlines() or [original]:
 
+            cur[0] = font(explicit_line) if callable(font) else font
+
             parts = split_piece(explicit_line)
 
             for part in parts:
 
                 new_item = dict(item)
                 new_item["text"] = part
+                new_item["font"] = cur[0]
 
                 wrapped.append(new_item)
 
@@ -1070,57 +1237,67 @@ def clean_logo_edges(logo_img):
         return logo_img
 
 
-def build_final_segment_frame(
+_BASE_CACHE = {}
+_BASE_CACHE_LOCK = threading.Lock()
+
+
+def _place_image(orig, box_w, box_h, zoom, fx, fy, mode):
+    """Crop `orig` to box_w x box_h. mode "cover" fills the box, "width" fits the width.
+    zoom >= 1 enlarges, fx/fy (0..1, 0.5 = centre) pick which part stays visible."""
+
+    zoom = max(1.0, float(zoom or 1.0))
+    fx = min(1.0, max(0.0, float(0.5 if fx is None else fx)))
+    fy = min(1.0, max(0.0, float(0.5 if fy is None else fy)))
+
+    if mode == "width":
+        scale = (box_w / orig.width) * zoom
+    else:
+        scale = max(box_w / orig.width, box_h / orig.height) * zoom
+
+    new_w = max(box_w, int(round(orig.width * scale)))
+    new_h = max(box_h, int(round(orig.height * scale)))
+
+    resized = orig.resize((new_w, new_h), Image.Resampling.BILINEAR)
+
+    left = int(round((new_w - box_w) * fx))
+    top = int(round((new_h - box_h) * fy))
+
+    return resized.crop((left, top, left + box_w, top + box_h))
+
+
+def _compose_base_frame(
     bg_path,
     width,
     height,
-    parsed_lines,
-    font_path,
-    font_size,
-    line_spacing,
     opacity_pct,
     logo_path,
-    is_mobile=False
+    is_mobile,
+    logo_dx,
+    logo_dy,
+    logo_size,
+    img_x=0.5,
+    img_y=0.5,
+    img_zoom=1.0
 ):
-
     try:
 
         orig = Image.open(bg_path).convert("RGB")
 
         if is_mobile:
 
-            scale = max(
-                width / orig.width,
-                height / orig.height
-            )
-
-            bg_w = int(orig.width * scale)
-            bg_h = int(orig.height * scale)
-
-            bg = orig.resize(
-                (bg_w, bg_h),
-                Image.Resampling.BILINEAR
-            )
-
-            cx = (bg_w - width) // 2
-            cy = (bg_h - height) // 2
-
-            base_canvas = bg.crop(
-                (cx, cy, cx + width, cy + height)
+            base_canvas = _place_image(
+                orig, width, height, img_zoom, img_x, img_y, "cover"
             ).filter(
                 ImageFilter.BoxBlur(radius=18)
             )
-
-            fg_w = width
 
             fg_h = min(
                 int(height * 0.52),
                 int(orig.height * (width / orig.width))
             )
 
-            fg = orig.resize(
-                (fg_w, fg_h),
-                Image.Resampling.BILINEAR
+            fg = _place_image(
+                orig, width, fg_h, img_zoom, img_x, img_y, "width"
             )
 
             base_canvas.paste(
@@ -1130,24 +1307,8 @@ def build_final_segment_frame(
 
         else:
 
-            scale = max(
-                width / orig.width,
-                height / orig.height
-            )
-
-            new_w = int(orig.width * scale)
-            new_h = int(orig.height * scale)
-
-            resized = orig.resize(
-                (new_w, new_h),
-                Image.Resampling.BILINEAR
-            )
-
-            cx = (new_w - width) // 2
-            cy = (new_h - height) // 2
-
-            base_canvas = resized.crop(
-                (cx, cy, cx + width, cy + height)
+            base_canvas = _place_image(
+                orig, width, height, img_zoom, img_x, img_y, "cover"
             )
 
     except Exception:
@@ -1181,20 +1342,27 @@ def build_final_segment_frame(
                 ).convert("RGBA")
             )
 
-            logo_size = int(height * 0.08)
+            logo_px = max(8, int(height * float(logo_size or 0.08)))
 
             logo_img.thumbnail(
-                (logo_size, logo_size),
+                (logo_px, logo_px),
                 Image.Resampling.LANCZOS
             )
 
-            pos_x = (
+            margin_x = 0.032 if is_mobile else 0.03
+            margin_y = 0.018 if is_mobile else 0.028
+
+            pos_x = int(
                 width
                 - logo_img.width
-                - (35 if is_mobile else 40)
+                - margin_x * width
+                + float(logo_dx) * width
             )
 
-            pos_y = 35 if is_mobile else 30
+            pos_y = int(
+                margin_y * height
+                + float(logo_dy) * height
+            )
 
             frame.paste(
                 logo_img,
@@ -1204,6 +1372,89 @@ def build_final_segment_frame(
 
         except Exception:
             pass
+
+    return frame
+
+
+def _cached_base_frame(
+    bg_path,
+    width,
+    height,
+    opacity_pct,
+    logo_path,
+    is_mobile,
+    logo_dx,
+    logo_dy,
+    logo_size,
+    img_x=0.5,
+    img_y=0.5,
+    img_zoom=1.0
+):
+    """Background + dim + logo is identical for every caption on the same image, so build it once."""
+
+    key = (
+        str(bg_path), width, height, opacity_pct,
+        str(logo_path), bool(is_mobile),
+        round(float(logo_dx), 5), round(float(logo_dy), 5), round(float(logo_size), 5),
+        round(float(img_x), 4), round(float(img_y), 4), round(float(img_zoom), 3)
+    )
+
+    with _BASE_CACHE_LOCK:
+        cached = _BASE_CACHE.get(key)
+
+    if cached is None:
+        cached = _compose_base_frame(
+            bg_path, width, height, opacity_pct, logo_path,
+            is_mobile, logo_dx, logo_dy, logo_size,
+            img_x, img_y, img_zoom
+        )
+        with _BASE_CACHE_LOCK:
+            if len(_BASE_CACHE) >= 10:
+                _BASE_CACHE.pop(next(iter(_BASE_CACHE)))
+            _BASE_CACHE[key] = cached
+
+    return cached.copy()
+
+
+def build_final_segment_frame(
+    bg_path,
+    width,
+    height,
+    parsed_lines,
+    font_path,
+    font_size,
+    line_spacing,
+    opacity_pct,
+    logo_path,
+    is_mobile=False,
+    offset_x=0,
+    offset_y=0,
+    logo_dx=0.0,
+    logo_dy=0.0,
+    logo_size=0.08,
+    lang_hint="my",
+    letter_spacing=0,
+    img_x=0.5,
+    img_y=0.5,
+    img_zoom=1.0,
+    align_h="center",
+    align_v="middle"
+):
+
+    frame = _cached_base_frame(
+        bg_path,
+        width,
+        height,
+        opacity_pct,
+        logo_path,
+        is_mobile,
+        logo_dx,
+        logo_dy,
+        logo_size,
+        img_x,
+        img_y,
+        img_zoom
+    )
 
     draw = ImageDraw.Draw(frame)
 
@@ -1225,11 +1476,26 @@ def build_final_segment_frame(
         width * (0.86 if is_mobile else 0.88)
     )
 
+    font_cache = {}
+
+    def font_for(text):
+
+        path = pick_font_path_for_text(text, lang_hint, font_path)
+
+        if path not in font_cache:
+            try:
+                font_cache[path] = load_caption_font(path, font_size)
+            except Exception:
+                font_cache[path] = font
+
+        return font_cache[path]
+
     parsed_lines = wrap_caption_items(
         parsed_lines,
         draw,
-        font,
-        max_text_width
+        font_for,
+        max_text_width,
+        letter_spacing
     )
 
     measured = []
@@ -1242,10 +1508,15 @@ def build_final_segment_frame(
         bbox = draw.textbbox(
             (0, 0),
             txt,
-            font=font
+            font=item.get("font", font)
         )
 
-        w = bbox[2] - bbox[0]
+        w = spaced_text_width(
+            draw,
+            txt,
+            item.get("font", font),
+            letter_spacing
+        )
         h = bbox[3] - bbox[1]
 
         measured.append({
@@ -1259,9 +1530,76 @@ def build_final_segment_frame(
     if total_text_height > 0:
         total_text_height -= line_spacing
 
-    curr_y = (
-        height - total_text_height
-    ) // 2
+    margin_y = int(height * 0.06)
+
+    if align_v == "top":
+        base_y = margin_y
+    elif align_v == "bottom":
+        base_y = height - margin_y - total_text_height
+    else:
+        base_y = (height - total_text_height) // 2
+
+    curr_y = base_y + int(offset_y)
+
+    region_left = (width - max_text_width) // 2
+
+    def line_x(line_w):
+        """Left edge of a line: start / middle / end of the text area."""
+
+        if align_h == "start":
+            return region_left + int(offset_x)
+
+        if align_h == "end":
+            return region_left + max_text_width - line_w + int(offset_x)
+
+        return ((width - line_w) // 2) + int(offset_x)
+
+    # A whole-segment box is ONE rectangle around every line of the caption.
+    seg_rect = None
+    seg_fill = seg_edge = None
+    scan_y = curr_y
+    pad_x = int(font_size * 0.38)
+    pad_y = int(font_size * 0.16)
+
+    for m in measured:
+
+        it = m["item"]
+
+        if it.get("style") == "box" and it.get("seg"):
+
+            x0 = line_x(m["w"])
+
+            r = [
+                x0 - pad_x,
+                scan_y - pad_y,
+                x0 + m["w"] + pad_x,
+                scan_y + m["h"] + pad_y
+            ]
+
+            seg_rect = (
+                r if seg_rect is None
+                else [
+                    min(seg_rect[0], r[0]),
+                    min(seg_rect[1], r[1]),
+                    max(seg_rect[2], r[2]),
+                    max(seg_rect[3], r[3])
+                ]
+            )
+
+            seg_fill = it.get("bg", "#8c4e12")
+            seg_edge = it.get("bc", "#ffffff")
+
+        scan_y += m["h"] + line_spacing
+
+    if seg_rect:
+
+        draw.rounded_rectangle(
+            seg_rect,
+            radius=12,
+            fill=seg_fill,
+            outline=seg_edge,
+            width=3
+        )
 
     for measured_item in measured:
 
@@ -1271,7 +1609,7 @@ def build_final_segment_frame(
         w = measured_item["w"]
         h = measured_item["h"]
 
-        curr_x = (width - w) // 2
+        curr_x = line_x(w)
 
         style = item.get(
             "style",
@@ -1290,28 +1628,29 @@ def build_final_segment_frame(
                 "#ffffff"
             )
 
-            pad_x = int(font_size * 0.38)
-            pad_y = int(font_size * 0.16)
+            if not item.get("seg"):
 
-            rect_box = [
-                curr_x - pad_x,
-                curr_y - pad_y,
-                curr_x + w + pad_x,
-                curr_y + h + pad_y
-            ]
+                rect_box = [
+                    curr_x - pad_x,
+                    curr_y - pad_y,
+                    curr_x + w + pad_x,
+                    curr_y + h + pad_y
+                ]
 
-            draw.rounded_rectangle(
-                rect_box,
-                radius=10,
-                fill=bg_color,
-                outline=bc_color,
-                width=3
-            )
+                draw.rounded_rectangle(
+                    rect_box,
+                    radius=10,
+                    fill=bg_color,
+                    outline=bc_color,
+                    width=3
+                )
 
-            draw.text(
+            draw_spaced(
+                draw,
                 (curr_x, curr_y),
                 txt,
-                font=font,
+                letter_spacing,
+                font=item.get("font", font),
                 fill=(255, 255, 255, 255),
                 stroke_width=2,
                 stroke_fill=(0, 0, 0, 255)
@@ -1324,10 +1663,12 @@ def build_final_segment_frame(
                 "#000000"
             )
 
-            draw.text(
+            draw_spaced(
+                draw,
                 (curr_x, curr_y),
                 txt,
-                font=font,
+                letter_spacing,
+                font=item.get("font", font),
                 fill=(255, 255, 255, 255),
                 stroke_width=3,
                 stroke_fill=outline_color
@@ -1335,10 +1676,12 @@ def build_final_segment_frame(
 
         else:
 
-            draw.text(
+            draw_spaced(
+                draw,
                 (curr_x, curr_y),
                 txt,
-                font=font,
+                letter_spacing,
+                font=item.get("font", font),
                 fill=(255, 255, 255, 255),
                 stroke_width=3,
                 stroke_fill=(0, 0, 0, 255)
@@ -1392,6 +1735,10 @@ def get_resolution(
 TRANSITION_FPS = 25
 
 
+ANIM_PCT_START = 22
+ANIM_PCT_END = 92
+
+
 def encode_transition_clips(
     jobs,
     temp_dir,
@@ -1410,6 +1757,32 @@ def encode_transition_clips(
     fps = TRANSITION_FPS
     done = {"n": 0}
     total = len(jobs)
+    lock = threading.Lock()
+    frames_done = {}
+    total_frames = max(1, sum(j[2] for j in jobs))
+    last_emit = {"t": 0.0}
+
+    def report(idx, frames):
+        """Aggregate real frame counts from every running ffmpeg into one smooth percentage."""
+
+        import time
+
+        with lock:
+
+            frames_done[idx] = frames
+            now = time.monotonic()
+
+            if now - last_emit["t"] < 0.25 and frames < total_frames:
+                return
+
+            last_emit["t"] = now
+            frac = min(1.0, sum(frames_done.values()) / total_frames)
+            finished = done["n"]
+
+        progress_cb(
+            f"Animating scenes {finished}/{total} ({int(frac * 100)}%)...",
+            ANIM_PCT_START + int(frac * (ANIM_PCT_END - ANIM_PCT_START))
+        )
 
     # Upscale before zoompan so the slow zoom stays smooth, not jittery.
     pre = 2.0 if width * height <= 1280 * 720 else 1.3
@@ -1431,19 +1804,48 @@ def encode_transition_clips(
             f"fade=t=out:st={fade_out_start:.3f}:d={fade_d:.3f}"
         )
 
-        if transition == "zoom":
+        if transition != "fade" and transition != "none":
 
-            zoom_step = 0.06 / max(1, n_frames)
+            # Sub-pixel camera move. zoompan crops on whole pixels, which makes slow
+            # zooms/pans step and shake; perspective interpolates between pixels (cubic).
+            N = max(1, n_frames)
+            p = f"(on/{N})"
+            if transition == "zoom":
+                z = f"(1+0.06*{p})"
+                left, top = f"(W-W/{z})/2", f"(H-H/{z})/2"
+                cw, ch = f"(W/{z})", f"(H/{z})"
+            elif transition == "zoom-out":
+                z = f"(1.06-0.06*{p})"
+                left, top = f"(W-W/{z})/2", f"(H-H/{z})/2"
+                cw, ch = f"(W/{z})", f"(H/{z})"
+            else:
+                z = "1.08"
+                cw, ch = f"(W/{z})", f"(H/{z})"
+                left, top = f"(W-{cw})/2", f"(H-{ch})/2"
+                if transition == "pan-left":
+                    left = f"(W-{cw})*(1-{p})"
+                elif transition == "pan-right":
+                    left = f"(W-{cw})*{p}"
+                elif transition == "drift-up":
+                    top = f"(H-{ch})*(1-{p})"
+                else:
+                    top = f"(H-{ch})*{p}"
 
             vf = (
-                f"scale={pre_w}:{pre_h},"
-                f"zoompan=z='1+{zoom_step:.6f}*on'"
-                f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-                f":d={n_frames}:s={width}x{height}:fps={fps},"
+                f"perspective="
+                f"x0='{left}':y0='{top}':"
+                f"x1='({left})+{cw}':y1='{top}':"
+                f"x2='{left}':y2='({top})+{ch}':"
+                f"x3='({left})+{cw}':y3='({top})+{ch}':"
+                f"eval=frame:interpolation=cubic,"
                 f"{fades},format=yuv420p"
             )
 
-            in_args = ["-i", str(seg_file)]
+            in_args = [
+                "-loop", "1",
+                "-framerate", str(fps),
+                "-i", str(seg_file)
+            ]
 
         else:
 
@@ -1473,31 +1875,55 @@ def encode_transition_clips(
             str(out)
         ]
 
-        proc = subprocess.run(
+        cmd[1:1] = ["-progress", "pipe:1", "-nostats"]
+
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
-            text=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
         )
+
+        log = []
+
+        for line in proc.stdout:
+
+            line = line.strip()
+
+            if line.startswith("frame="):
+
+                try:
+                    report(idx, int(line.split("=", 1)[1]))
+                except ValueError:
+                    pass
+
+            elif line and "=" not in line:
+                log.append(line)
+
+        proc.wait()
 
         if proc.returncode != 0:
             raise RuntimeError(
-                f"Transition clip {idx} failed: {proc.stderr[-400:]}"
+                f"Transition clip {idx} failed: {' '.join(log)[-400:]}"
             )
 
-        done["n"] += 1
+        report(idx, n_frames)
 
-        progress_cb(
-            f"Animating scenes {done['n']}/{total}...",
-            46 + int(done["n"] / total * 4)
-        )
+        with lock:
+            done["n"] += 1
 
         return out
 
     with ThreadPoolExecutor(
-        max_workers=min(4, os.cpu_count() or 2)
+        max_workers=max(2, min(6, os.cpu_count() or 2))
     ) as pool:
 
-        return list(pool.map(encode, jobs))
+        # Start the longest scenes first so one big scene never becomes a long idle tail.
+        order = sorted(jobs, key=lambda j: -j[2])
+        results = dict(zip((j[0] for j in order), pool.map(encode, order)))
+
+        return [results[j[0]] for j in jobs]
 
 
 def render_all_clips(
@@ -1570,7 +1996,7 @@ def render_all_clips(
             cfg.get("transition", "fade")
         ).lower().strip()
 
-        if transition not in ("none", "fade", "zoom"):
+        if transition not in ("none", "fade", "zoom", "zoom-out", "pan-left", "pan-right", "drift-up", "drift-down"):
             transition = "fade"
 
         scene_jobs = []
@@ -1613,73 +2039,131 @@ def render_all_clips(
 
         concat_txt = temp_dir / "timeline_concat.txt"
 
+        # ---- plan every scene first (cheap, sequential: keeps the timeline math exact) ----
+        plans = []
+
+        for idx, row in df.iterrows():
+
+            matched_img = row.get("matched_img", "")
+
+            img_name = (
+                Path(matched_img).name
+                if matched_img
+                else ""
+            )
+
+            source_p = None
+
+            for directory in search_dirs:
+
+                if (directory / img_name).exists():
+
+                    source_p = directory / img_name
+                    break
+
+            if not source_p:
+                source_p = default_fallback
+
+            dur = max(
+                0.4,
+                float(row["end_time"])
+                - float(row["start_time"])
+            )
+
+            n_frames = None
+
+            if transition != "none":
+
+                # Frame counts come from cumulative time so rounding
+                # never drifts away from the narration audio.
+                n_frames = max(
+                    2,
+                    round((timeline_acc + dur) * TRANSITION_FPS)
+                    - round(timeline_acc * TRANSITION_FPS)
+                )
+
+                timeline_acc += dur
+
+            def _num(key, default):
+                try:
+                    v = row.get(key, default)
+                    return default if v is None or v != v else float(v)
+                except Exception:
+                    return default
+
+            plans.append({
+                "idx": idx,
+                "img_x": _num("img_x", 0.5),
+                "img_y": _num("img_y", 0.5),
+                "img_zoom": _num("img_zoom", 1.0),
+                "source": source_p,
+                "dur": dur,
+                "n_frames": n_frames,
+                "tokens": parse_html_tokens(str(row.get("caption", ""))),
+                "seg_file": temp_dir / f"seg_{idx}.jpg",
+            })
+
+        # ---- build the caption frames in parallel (PIL releases the GIL for the heavy parts) ----
+        built = {"n": 0}
+        built_lock = threading.Lock()
+
+        def build_scene(plan):
+
+            frame_img = build_final_segment_frame(
+                plan["source"],
+                width,
+                height,
+                plan["tokens"],
+                font_path,
+                font_size,
+                line_spacing,
+                opacity,
+                logo_path,
+                is_mobile=is_mobile,
+                offset_x=float(cfg.get("text_dx", 0) or 0) * width,
+                offset_y=float(cfg.get("text_dy", 0) or 0) * height,
+                logo_dx=float(cfg.get("logo_dx", 0) or 0),
+                logo_dy=float(cfg.get("logo_dy", 0) or 0),
+                logo_size=float(cfg.get("logo_size", 0.08) or 0.08),
+                lang_hint=target_lang,
+                letter_spacing=float(cfg.get("letter_spacing", 0) or 0) * scale_ratio,
+                img_x=plan["img_x"],
+                img_y=plan["img_y"],
+                img_zoom=plan["img_zoom"],
+                align_h=str(cfg.get("text_align_h", "center")),
+                align_v=str(cfg.get("text_align_v", "middle"))
+            )
+
+            frame_img.save(
+                plan["seg_file"],
+                "JPEG",
+                quality=92
+            )
+
+            with built_lock:
+
+                built["n"] += 1
+                n = built["n"]
+
+            progress_cb(
+                f"Synthesized {n}/{total_rows} scenes ({target_lang.upper()})...",
+                15 + int((n / max(1, total_rows)) * 7)
+            )
+
+        workers = max(2, min(6, (os.cpu_count() or 2)))
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(build_scene, plans))
+
         with open(
             concat_txt,
             "w",
             encoding="utf-8"
         ) as f_out:
 
-            for idx, row in df.iterrows():
+            for plan in plans:
 
-                matched_img = row.get(
-                    "matched_img",
-                    ""
-                )
-
-                img_name = (
-                    Path(matched_img).name
-                    if matched_img
-                    else ""
-                )
-
-                source_p = None
-
-                for directory in search_dirs:
-
-                    if (directory / img_name).exists():
-
-                        source_p = directory / img_name
-                        break
-
-                if not source_p:
-                    source_p = default_fallback
-
-                dur = max(
-                    0.4,
-                    float(row["end_time"])
-                    - float(row["start_time"])
-                )
-
-                caption_text = str(
-                    row.get("caption", "")
-                )
-
-                parsed_tokens = parse_html_tokens(
-                    caption_text
-                )
-
-                frame_img = build_final_segment_frame(
-                    source_p,
-                    width,
-                    height,
-                    parsed_tokens,
-                    font_path,
-                    font_size,
-                    line_spacing,
-                    opacity,
-                    logo_path,
-                    is_mobile=is_mobile
-                )
-
-                seg_file = (
-                    temp_dir / f"seg_{idx}.jpg"
-                )
-
-                frame_img.save(
-                    seg_file,
-                    "JPEG",
-                    quality=92
-                )
+                seg_file = plan["seg_file"]
 
                 if transition == "none":
 
@@ -1688,38 +2172,13 @@ def render_all_clips(
                     )
 
                     f_out.write(
-                        f"duration {dur:.3f}\n"
+                        f"duration {plan['dur']:.3f}\n"
                     )
 
                 else:
 
-                    # Frame counts come from cumulative time so rounding
-                    # never drifts away from the narration audio.
-                    n_frames = max(
-                        2,
-                        round((timeline_acc + dur) * TRANSITION_FPS)
-                        - round(timeline_acc * TRANSITION_FPS)
-                    )
-
-                    timeline_acc += dur
-
                     scene_jobs.append(
-                        (idx, seg_file, n_frames)
-                    )
-
-                if idx % 3 == 0 or idx == total_rows - 1:
-
-                    pct = (
-                        15
-                        + int(
-                            (idx / max(1, total_rows))
-                            * 30
-                        )
-                    )
-
-                    progress_cb(
-                        f"Synthesized {idx + 1}/{total_rows} scenes ({target_lang.upper()})...",
-                        pct
+                        (plan["idx"], seg_file, plan["n_frames"])
                     )
 
             if total_rows > 0 and transition == "none":
@@ -1737,7 +2196,7 @@ def render_all_clips(
 
             progress_cb(
                 f"Animating {len(scene_jobs)} scene transitions...",
-                46
+                22
             )
 
             clip_files = encode_transition_clips(
@@ -1873,9 +2332,12 @@ def render_all_clips(
             str(output_file)
         ]
 
+        final_base = ANIM_PCT_END if scene_jobs else 50
+        final_span = (99 - ANIM_PCT_END) if scene_jobs else 48
+
         progress_cb(
             f"Encoding [{target_lang.upper()}] video...",
-            50
+            final_base
         )
 
         process = subprocess.Popen(
@@ -1902,8 +2364,8 @@ def render_all_clips(
 
                     pct = min(
                         99,
-                        50 + int(
-                            (elapsed / total_duration) * 48
+                        final_base + int(
+                            (elapsed / total_duration) * final_span
                         )
                     )
 

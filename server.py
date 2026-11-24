@@ -608,6 +608,15 @@ async def update_row(payload: Dict[str, Any]):
     return {"success": False}
 
 
+@app.post("/api/set_rows")
+async def set_rows(payload: Dict[str, Any]):
+    new_rows = payload.get("rows")
+    if not isinstance(new_rows, list) or not new_rows:
+        return {"success": False, "error": "Invalid rows."}
+    SESSION["rows"] = new_rows
+    return {"success": True}
+
+
 @app.post("/api/delete_row")
 async def delete_row(payload: Dict[str, Any]):
     idx = int(payload.get("index", -1))
@@ -628,6 +637,14 @@ async def start_render(
     enable_bgm: bool = Form(True),
     target_lang: str = Form("my"),
     transition: str = Form("fade"),
+    text_dx: float = Form(0.0),
+    text_dy: float = Form(0.0),
+    logo_dx: float = Form(0.0),
+    logo_dy: float = Form(0.0),
+    logo_size: float = Form(0.08),
+    letter_spacing: float = Form(0.0),
+    text_align_h: str = Form("center"),
+    text_align_v: str = Form("middle"),
     rows_json: Optional[str] = Form(None)
 ):
     # Reserve the render slot before validating or preparing any render data.
@@ -675,7 +692,15 @@ async def start_render(
                     "opacity": opacity,
                     "enable_bgm": enable_bgm,
                     "target_lang": selected_lang,
-                    "transition": transition
+                    "transition": transition,
+                    "text_dx": text_dx,
+                    "text_dy": text_dy,
+                    "logo_dx": logo_dx,
+                    "logo_dy": logo_dy,
+                    "logo_size": logo_size,
+                    "letter_spacing": letter_spacing,
+                    "text_align_h": text_align_h,
+                    "text_align_v": text_align_v
                 }
 
                 success, res = video_engine.render_all_clips(

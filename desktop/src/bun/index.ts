@@ -25,7 +25,7 @@ function spawnBackend(): Bun.Subprocess<"ignore", "pipe", "inherit"> {
 		console.log(`Starting bundled backend: ${bundled}`);
 		return Bun.spawn([bundled], { env, stdout: "pipe", stderr: "inherit" });
 	}
-	const repoRoot = resolve(import.meta.dir, "../../..");
+	const repoRoot = process.env.DHAMMA_REPO_ROOT ?? resolve(import.meta.dir, "../../..");
 	console.log(`Starting dev backend via uv in ${repoRoot}`);
 	return Bun.spawn(["uv", "run", "python", "server.py"], {
 		cwd: repoRoot,
