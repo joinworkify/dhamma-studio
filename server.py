@@ -37,11 +37,13 @@ import datetime
 import sys
 import threading
 import time
+import uuid
 import webbrowser
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from urllib.parse import quote, unquote
 
 try:
     from dotenv import load_dotenv
@@ -82,17 +84,17 @@ IMAGES_DIR = UPLOAD_DIR / "images"
 STATIC_DIR = BASE_DIR / "static"
 FONTS_DIR = BASE_DIR / "fonts"
 OUTPUT_DIR = APP_DATA_DIR / "output_renders"
-BUNDLED_IMAGES_DIR = BASE_DIR / "images"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-DEFAULT_MEDIA_DIR = BUNDLED_IMAGES_DIR if BUNDLED_IMAGES_DIR.exists() else IMAGES_DIR
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_URL_PREFIX = "/api/get_image/"
 
 SESSION = {
     "audio_path": "",
-    "media_dir": str(DEFAULT_MEDIA_DIR),
+    "media_dir": "",  # picture folder chosen for this video; empty until selected
     "logo_path": "",
     "excel_path": "",
     "rows": [],
@@ -220,16 +222,46 @@ def set_progress(msg: str, pct: int):
 
 
 def get_available_images():
-    search_dirs = [Path(SESSION["media_dir"]), IMAGES_DIR, BUNDLED_IMAGES_DIR, BASE_DIR]
-    all_imgs = []
-    seen = set()
-    for d in search_dirs:
-        if d.exists() and d.is_dir():
-            for p in list(d.glob("*.jpg")) + list(d.glob("*.jpeg")) + list(d.glob("*.png")) + list(d.glob("*.webp")):
-                if p.name not in seen:
-                    all_imgs.append(p)
-                    seen.add(p.name)
-    return all_imgs
+    """Pictures from the selected folder only. Never fall back to other folders."""
+    if not SESSION["media_dir"]:
+        return []
+    media_dir = Path(SESSION["media_dir"])
+    if not media_dir.is_dir():
+        return []
+    return sorted(
+        (
+            p for p in media_dir.iterdir()
+            if p.is_file() and p.suffix.lower() in IMAGE_EXTS and not p.name.startswith("._")
+        ),
+        key=lambda p: p.name.lower(),
+    )
+
+
+def image_url(name: str) -> str:
+    return IMAGE_URL_PREFIX + quote(name)
+
+
+def sync_rows_to_images(names: List[str]) -> None:
+    """Drop references to pictures outside the selected folder and apply the Excel picks."""
+    available = set(names)
+    default_url = image_url(names[0]) if names else ""
+    for r in SESSION["rows"]:
+        current = unquote(str(r.get("matched_img") or "").split("/")[-1])
+        if r.get("is_manual_img") and current in available:
+            continue
+        excel_img = r.get("excel_img")
+        if excel_img in available:
+            r["matched_img"], r["is_manual_img"] = image_url(excel_img), True
+            continue
+        r["is_manual_img"] = False
+        if current not in available:
+            r["matched_img"] = default_url
+
+
+def new_media_dir() -> Path:
+    path = IMAGES_DIR / uuid.uuid4().hex
+    path.mkdir(parents=True)
+    return path
 
 
 def parse_time_to_seconds(val: Any) -> Optional[float]:
@@ -330,7 +362,7 @@ def parse_excel_sync_sheet(excel_path: Path, format_type: str = "landscape"):
         lang_columns.append({"col_name": c, "code": lang_code, "label": str(c).strip()})
 
     valid_imgs = get_available_images()
-    default_img_url = f"/api/get_image/{valid_imgs[0].name}" if valid_imgs else ""
+    default_img_url = image_url(valid_imgs[0].name) if valid_imgs else ""
 
     rows = []
     for _, r in df.iterrows():
@@ -352,13 +384,10 @@ def parse_excel_sync_sheet(excel_path: Path, format_type: str = "landscape"):
         if not main_caption:
             continue
 
-        matched_img_val = default_img_url
+        excel_img = ""
         if col_manual_image and pd.notna(r[col_manual_image]):
-            custom_img = str(r[col_manual_image]).strip()
-            for cand_dir in [Path(SESSION["media_dir"]), IMAGES_DIR, BUNDLED_IMAGES_DIR]:
-                if (cand_dir / custom_img).exists():
-                    matched_img_val = f"/api/get_image/{custom_img}"
-                    break
+            excel_img = Path(str(r[col_manual_image]).strip()).name
+        excel_img_found = any(p.name == excel_img for p in valid_imgs)
 
         rows.append({
             "index": len(rows),
@@ -370,8 +399,9 @@ def parse_excel_sync_sheet(excel_path: Path, format_type: str = "landscape"):
             "end_time": et,
             "duration": round(max(0.2, et - st), 2),
             "target_lang": "my" if "my" in translations else (lang_columns[0]["code"] if lang_columns else "default"),
-            "matched_img": matched_img_val,
-            "is_manual_img": bool(col_manual_image and pd.notna(r[col_manual_image]))
+            "matched_img": image_url(excel_img) if excel_img_found else default_img_url,
+            "is_manual_img": excel_img_found,
+            "excel_img": excel_img
         })
 
     languages_meta = [{"code": l["code"], "label": l["label"]} for l in lang_columns]
@@ -380,7 +410,10 @@ def parse_excel_sync_sheet(excel_path: Path, format_type: str = "landscape"):
 
 def auto_match_all_images():
     valid_imgs = get_available_images()
-    if not valid_imgs or not SESSION["rows"]:
+    if not SESSION["rows"]:
+        return
+    sync_rows_to_images([p.name for p in valid_imgs])
+    if not valid_imgs:
         return
 
     SESSION["cached_images"], SESSION["image_embeddings"] = video_engine.scan_and_index_images(
@@ -395,7 +428,7 @@ def auto_match_all_images():
         targets = [i for i, r in enumerate(SESSION["rows"]) if not r.get("is_manual_img")]
         spread = video_engine.spread_images(SESSION["cached_images"], len(targets))
         for row_idx, img_p in zip(targets, spread):
-            SESSION["rows"][row_idx]["matched_img"] = f"/api/get_image/{img_p.name}"
+            SESSION["rows"][row_idx]["matched_img"] = image_url(img_p.name)
         set_progress("AI model not ready - images spread evenly. Re-Match once it finishes downloading.", 100)
         return
 
@@ -419,7 +452,7 @@ def auto_match_all_images():
         )
         for row_idx, img_p in zip(indices, matched):
             if img_p and img_p.name:
-                SESSION["rows"][row_idx]["matched_img"] = f"/api/get_image/{img_p.name}"
+                SESSION["rows"][row_idx]["matched_img"] = image_url(img_p.name)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -482,21 +515,59 @@ async def model_download():
 
 @app.post("/api/upload_images_folder")
 async def upload_images_folder(files: List[UploadFile] = File(...)):
-    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    saved = []
+    if SESSION["is_rendering"]:
+        return JSONResponse(
+            {"success": False, "error": "Wait for the render to finish before changing pictures."},
+            status_code=409,
+        )
+    # Each selection gets its own empty folder, so earlier pictures can never leak in.
+    target = new_media_dir()
+    saved = set()
     for f in files:
-        if f.filename:
-            dest = IMAGES_DIR / Path(f.filename).name
-            with open(dest, "wb") as buffer:
-                shutil.copyfileobj(f.file, buffer)
-            if dest.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
-                saved.append(dest)
+        name = Path(f.filename or "").name
+        if not name or name.startswith("._") or Path(name).suffix.lower() not in IMAGE_EXTS:
+            continue
+        with open(target / name, "wb") as buffer:
+            shutil.copyfileobj(f.file, buffer)
+        saved.add(name)
 
-    SESSION["media_dir"] = str(IMAGES_DIR)
+    if not saved:
+        shutil.rmtree(target, ignore_errors=True)
+        return JSONResponse(
+            {"success": False, "error": "No JPG, PNG or WebP images in that folder."},
+            status_code=400,
+        )
+
+    previous = SESSION["media_dir"]
+    SESSION["media_dir"] = str(target)
+    if previous and Path(previous).parent == IMAGES_DIR:
+        shutil.rmtree(previous, ignore_errors=True)
+
+    # A new folder means new pictures: earlier choices no longer apply.
+    for r in SESSION["rows"]:
+        r["is_manual_img"] = False
     if SESSION["rows"]:
         auto_match_all_images()
     set_progress(f"{len(saved)} Images Ready", 100)
     return {"success": True, "count": len(saved), "rows": SESSION["rows"]}
+
+
+@app.get("/api/list_images")
+async def list_images():
+    return {"success": True, "images": [p.name for p in get_available_images()]}
+
+
+@app.post("/api/upload_image")
+async def upload_image(file: UploadFile = File(...)):
+    """Add one picture to the pool without re-running the automatic matching."""
+    name = Path(file.filename or "").name
+    if not name or Path(name).suffix.lower() not in IMAGE_EXTS:
+        return JSONResponse({"success": False, "error": "Use a JPG, PNG or WebP image."}, status_code=400)
+    if not SESSION["media_dir"] or not Path(SESSION["media_dir"]).is_dir():
+        SESSION["media_dir"] = str(new_media_dir())
+    with open(Path(SESSION["media_dir"]) / name, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"success": True, "name": name}
 
 
 @app.post("/api/match_images")
@@ -637,6 +708,8 @@ async def start_render(
     enable_bgm: bool = Form(True),
     target_lang: str = Form("my"),
     transition: str = Form("fade"),
+    transition_dur: float = Form(0.2),
+    title_zoom: bool = Form(True),
     text_dx: float = Form(0.0),
     text_dy: float = Form(0.0),
     logo_dx: float = Form(0.0),
@@ -672,6 +745,15 @@ async def start_render(
             except (TypeError, json.JSONDecodeError):
                 pass
 
+        image_names = [p.name for p in get_available_images()]
+        if not image_names:
+            release_render_reservation()
+            return JSONResponse(
+                {"success": False, "error": "Choose an image folder before rendering."},
+                status_code=400,
+            )
+        sync_rows_to_images(image_names)
+
         for row in SESSION["rows"]:
             row["target_lang"] = selected_lang
 
@@ -693,6 +775,8 @@ async def start_render(
                     "enable_bgm": enable_bgm,
                     "target_lang": selected_lang,
                     "transition": transition,
+                    "transition_dur": max(0.05, min(1.5, transition_dur)),
+                    "title_zoom": title_zoom,
                     "text_dx": text_dx,
                     "text_dy": text_dy,
                     "logo_dx": logo_dx,
@@ -821,10 +905,10 @@ async def save_video():
 @app.get("/api/get_image/{filename}")
 async def get_image(filename: str):
     safe_name = Path(filename).name
-    for cand_dir in [Path(SESSION["media_dir"]), UPLOAD_DIR / "images", BASE_DIR / "images", BASE_DIR]:
-        f_path = cand_dir / safe_name
-        if f_path.is_file() and f_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-            return FileResponse(f_path)
+    for f_path in get_available_images():
+        if f_path.name == safe_name:
+            # Two folders can reuse a file name, so the webview must not cache pictures.
+            return FileResponse(f_path, headers={"Cache-Control": "no-store"})
     return JSONResponse({"error": "Image not found"}, status_code=404)
 
 

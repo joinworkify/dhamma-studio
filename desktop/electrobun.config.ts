@@ -4,7 +4,7 @@ export default {
 	app: {
 		name: "Dhamma Studio",
 		identifier: "dev.joinworkify.dhammastudio",
-		version: "0.5.0",
+		version: "0.5.1",
 	},
 	runtime: {
 		// The backend's exit (or window close -> graceful shutdown) ends the app.

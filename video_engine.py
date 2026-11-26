@@ -12,6 +12,7 @@ import threading
 
 from pathlib import Path
 from collections import Counter
+from urllib.parse import unquote
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -1734,6 +1735,34 @@ def get_resolution(
 
 TRANSITION_FPS = 25
 
+def _extract_text_layer(full, bare):
+    """Split the caption (text + box) out of a finished frame.
+
+    `bare` is the same frame without any caption. Returns (RGBA crop, centre_x,
+    centre_y) so the caption can be scaled on its own, or None if nothing differs.
+    """
+    from PIL import ImageChops
+
+    diff = ImageChops.difference(full.convert("RGB"), bare.convert("RGB"))
+    mask = diff.convert("L").point(lambda v: 255 if v > 3 else 0)
+    box = mask.getbbox()
+    if not box:
+        return None
+    pad = 6
+    box = (
+        max(0, box[0] - pad), max(0, box[1] - pad),
+        min(full.width, box[2] + pad), min(full.height, box[3] + pad),
+    )
+    # Soft alpha: strength follows how much each pixel changed, so anti-aliased
+    # glyph edges and a translucent box keep their look when scaled.
+    alpha = diff.convert("L").point(lambda v: min(255, v * 6))
+    alpha = alpha.filter(ImageFilter.MaxFilter(3))
+    layer = full.convert("RGBA")
+    layer.putalpha(alpha)
+    layer = layer.crop(box)
+    return layer, (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+
+
 
 ANIM_PCT_START = 22
 ANIM_PCT_END = 92
@@ -1745,7 +1774,8 @@ def encode_transition_clips(
     width,
     height,
     transition,
-    progress_cb
+    progress_cb,
+    fade_seconds=0.2
 ):
     """
     Turn each baked caption frame into a short animated mp4 clip.
@@ -1791,12 +1821,13 @@ def encode_transition_clips(
 
     def encode(job):
 
-        idx, seg_file, n_frames = job
+        idx, seg_file, n_frames = job[:3]
+        title = job[3] if len(job) > 3 else None
 
         out = temp_dir / f"clip_{idx}.mp4"
 
         dur = n_frames / fps
-        fade_d = max(0.08, min(0.35, dur * 0.3))
+        fade_d = max(0.04, min(float(fade_seconds), dur * 0.4))
         fade_out_start = max(0.0, dur - fade_d)
 
         fades = (
@@ -1857,6 +1888,24 @@ def encode_transition_clips(
                 "-i", str(seg_file)
             ]
 
+        post = f"{fades},format=yuv420p"
+        if title:
+            # Opening slide: the caption eases from 82% to full size on its own layer.
+            cam = vf[: -len(post)].rstrip(",") or "null"
+            tz = max(8, int(fps * 1.4))
+            prog = f"min(n/{tz},1)"
+            scale = f"(0.82+0.18*({prog}*{prog}*(3-2*{prog})))"
+            fc = (
+                f"[0:v]{cam}[bg];"
+                f"[1:v]format=rgba,scale=w='trunc(iw*{scale}/2)*2':h='trunc(ih*{scale}/2)*2':eval=frame[tt];"
+                f"[bg][tt]overlay=x='{title['cx']:.1f}-w/2':y='{title['cy']:.1f}-h/2':eval=frame:format=auto,"
+                f"{post}[v]"
+            )
+            in_args = in_args + ["-loop", "1", "-framerate", str(fps), "-i", str(title["file"])]
+            vf_args = ["-filter_complex", fc, "-map", "[v]"]
+        else:
+            vf_args = ["-vf", vf]
+
         cmd = [
             FFMPEG_BIN,
             "-y",
@@ -1864,7 +1913,7 @@ def encode_transition_clips(
             "-hide_banner",
             "-loglevel", "error",
             *in_args,
-            "-vf", vf,
+            *vf_args,
             "-frames:v", str(n_frames),
             "-r", str(fps),
             "-c:v", "libx264",
@@ -2006,29 +2055,19 @@ def render_all_clips(
             target_lang=target_lang
         )
 
-        search_dirs = [
-            Path(media_dir),
-            APP_DATA_DIR / "uploads" / "images",
-            BASE_DIR / "images",
-            BASE_DIR
-        ]
-
-        fallback_images = []
-
-        for directory in search_dirs:
-
-            if directory.exists():
-
-                fallback_images += (
-                    list(directory.glob("*.jpg"))
-                    + list(directory.glob("*.png"))
-                )
-
-        default_fallback = (
-            fallback_images[0]
-            if fallback_images
-            else Path("empty.jpg")
+        # Only the folder selected for this video; no fallback to other folders.
+        folder_images = sorted(
+            (
+                p for p in Path(media_dir).iterdir()
+                if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+            ),
+            key=lambda p: p.name.lower(),
         )
+
+        if not folder_images:
+            return False, "No images in the selected folder."
+
+        images_by_name = {p.name: p for p in folder_images}
 
         progress_cb(
             f"Synthesizing [{target_lang.upper()}] scenes...",
@@ -2046,23 +2085,10 @@ def render_all_clips(
 
             matched_img = row.get("matched_img", "")
 
-            img_name = (
-                Path(matched_img).name
-                if matched_img
-                else ""
-            )
+            # Image URLs are percent-encoded (spaces, Burmese names).
+            img_name = unquote(str(matched_img or "").split("/")[-1])
 
-            source_p = None
-
-            for directory in search_dirs:
-
-                if (directory / img_name).exists():
-
-                    source_p = directory / img_name
-                    break
-
-            if not source_p:
-                source_p = default_fallback
+            source_p = images_by_name.get(img_name, folder_images[0])
 
             dur = max(
                 0.4,
@@ -2096,7 +2122,10 @@ def render_all_clips(
                 "img_x": _num("img_x", 0.5),
                 "img_y": _num("img_y", 0.5),
                 "img_zoom": _num("img_zoom", 1.0),
+                "text_dx": _num("text_dx", float(cfg.get("text_dx", 0) or 0)),
+                "text_dy": _num("text_dy", float(cfg.get("text_dy", 0) or 0)),
                 "source": source_p,
+                "title_zoom": bool(cfg.get("title_zoom", True)) and idx == 0 and transition != "none",
                 "dur": dur,
                 "n_frames": n_frames,
                 "tokens": parse_html_tokens(str(row.get("caption", ""))),
@@ -2120,8 +2149,8 @@ def render_all_clips(
                 opacity,
                 logo_path,
                 is_mobile=is_mobile,
-                offset_x=float(cfg.get("text_dx", 0) or 0) * width,
-                offset_y=float(cfg.get("text_dy", 0) or 0) * height,
+                offset_x=plan["text_dx"] * width,
+                offset_y=plan["text_dy"] * height,
                 logo_dx=float(cfg.get("logo_dx", 0) or 0),
                 logo_dy=float(cfg.get("logo_dy", 0) or 0),
                 logo_size=float(cfg.get("logo_size", 0.08) or 0.08),
@@ -2134,11 +2163,34 @@ def render_all_clips(
                 align_v=str(cfg.get("text_align_v", "middle"))
             )
 
-            frame_img.save(
-                plan["seg_file"],
-                "JPEG",
-                quality=92
-            )
+            if plan["title_zoom"]:
+                try:
+                    bare = build_final_segment_frame(
+                        plan["source"], width, height, [], font_path, font_size,
+                        line_spacing, opacity, logo_path, is_mobile=is_mobile,
+                        logo_dx=float(cfg.get("logo_dx", 0) or 0),
+                        logo_dy=float(cfg.get("logo_dy", 0) or 0),
+                        logo_size=float(cfg.get("logo_size", 0.08) or 0.08),
+                        lang_hint=target_lang,
+                        img_x=plan["img_x"], img_y=plan["img_y"], img_zoom=plan["img_zoom"],
+                    )
+                    got = _extract_text_layer(frame_img, bare)
+                    if got:
+                        layer, cx, cy = got
+                        title_png = temp_dir / f"title_{plan['idx']}.png"
+                        layer.save(title_png)
+                        plan["title"] = {"file": title_png, "cx": cx, "cy": cy}
+                        bare.save(plan["seg_file"], "JPEG", quality=92)
+                        frame_img = None
+                except Exception as exc:
+                    warnings.warn(f"Opening title zoom skipped: {exc}")
+
+            if frame_img is not None:
+                frame_img.save(
+                    plan["seg_file"],
+                    "JPEG",
+                    quality=92
+                )
 
             with built_lock:
 
@@ -2178,7 +2230,7 @@ def render_all_clips(
                 else:
 
                     scene_jobs.append(
-                        (plan["idx"], seg_file, plan["n_frames"])
+                        (plan["idx"], seg_file, plan["n_frames"], plan.get("title"))
                     )
 
             if total_rows > 0 and transition == "none":
@@ -2205,7 +2257,8 @@ def render_all_clips(
                 width,
                 height,
                 transition,
-                progress_cb
+                progress_cb,
+                fade_seconds=float(cfg.get("transition_dur", 0.2) or 0.2),
             )
 
             with open(

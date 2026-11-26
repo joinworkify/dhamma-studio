@@ -17,7 +17,7 @@
       serif: '"Iowan Old Style", "Palatino Linotype", Georgia, serif',
       mono: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace'
     };
-    window.DEFAULT_PREFS = { theme: 'dark', font: 'system', size: 'md', showGuides: true, snap: true, alwaysGrid: false };
+    window.DEFAULT_PREFS = { theme: 'dark', font: 'system', size: 'md', showGuides: true, snap: true, alwaysGrid: false, transDur: 0.2, titleZoom: true };
     window.loadPrefs = function () {
       try { return Object.assign({}, window.DEFAULT_PREFS, JSON.parse(localStorage.getItem('dhamma.prefs') || '{}')); }
       catch (e) { return Object.assign({}, window.DEFAULT_PREFS); }
@@ -80,6 +80,8 @@
     #bg-layer { position:absolute; inset:0; z-index:0; }
     #bg-layer.anim-fade { animation: bgFade 600ms ease-out; }
     #bg-layer.anim-zoom { animation: bgZoom 1400ms cubic-bezier(.2,.7,.2,1); }
+    #canvas-text.title-zoom { animation: titleZoom 1400ms cubic-bezier(.4,0,.2,1) both; }
+    @keyframes titleZoom { from { scale: .82; } to { scale: 1; } }
     @keyframes bgFade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes bgZoom { from { opacity: .2; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
     #canvas-text { transform: translateY(0); }
@@ -224,6 +226,20 @@
     .insp .stepper.wide input { width:46px; }
     @media (max-width: 1180px) { .insp-split { grid-template-columns:1fr; } .insp-split .insp-sec + .insp-sec { border-left:0; border-top:1px solid var(--line); } .insp-note { display:none; } }
 
+    /* In-page confirm (native confirm() is blocked in the desktop webview) */
+    #confirm-ov { position:fixed; inset:0; z-index:10000; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+    #confirm-ov.open { display:flex; }
+    #confirm-box { width:min(380px, calc(100vw - 32px)); padding:20px; border-radius:16px; background:var(--s1); border:1px solid var(--line2); box-shadow:0 24px 60px rgba(0,0,0,.4); }
+    #confirm-msg { color:var(--t1); font-size:14px; line-height:20px; margin-bottom:16px; }
+    #confirm-box .row { display:flex; gap:8px; justify-content:flex-end; }
+    #img-ov { position:fixed; inset:0; z-index:10000; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+    #img-ov.open { display:flex; }
+    #img-box { width:min(720px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; padding:20px; border-radius:16px; background:var(--s1); border:1px solid var(--line2); box-shadow:0 24px 60px rgba(0,0,0,.4); }
+    #img-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:8px; }
+    #img-grid button { padding:0; border:2px solid transparent; border-radius:8px; overflow:hidden; background:var(--s2, #111); aspect-ratio:16/10; cursor:pointer; }
+    #img-grid button:hover { border-color:var(--line2); }
+    #img-grid button[aria-pressed="true"] { border-color:#6366f1; }
+    #img-grid img { width:100%; height:100%; object-fit:cover; display:block; }
     /* Settings dialog */
 
     dialog#settings-dialog { position:fixed; inset:12px 12px 12px auto; margin:0; width:min(420px, calc(100vw - 24px)); height:calc(100vh - 24px); max-height:none; padding:0; border:1px solid var(--line2); border-radius:16px; background:var(--s1); color:var(--t2); overflow:auto; box-shadow:0 24px 60px rgba(0,0,0,.4); z-index:9999; }
@@ -438,6 +454,7 @@
         <div class="insp-split">
           <section class="insp-sec" title="Offset from center, in pixels of the exported video. You can also drag the Move handle on the preview">
             <div class="insp-h">Text position <button id="pos-reset" class="insp-act">Reset</button></div>
+            <div class="seg seg-sm" id="seg-pos-scope" style="margin-bottom:8px"><button data-v="segment" aria-pressed="true" title="Moving text changes only the selected segment">This segment</button><button data-v="all" aria-pressed="false" title="Moving text changes every segment">All segments</button></div>
             <div class="insp-row">
               <div class="fld"><label for="pos-x">X</label><span class="stepper wide"><button type="button" data-st="pos-x" data-d="-1" aria-label="Decrease">−</button><input type="number" id="pos-x" value="0" step="1" ><button type="button" data-st="pos-x" data-d="1" aria-label="Increase">+</button></span></div>
               <div class="fld"><label for="pos-y">Y</label><span class="stepper wide"><button type="button" data-st="pos-y" data-d="-1" aria-label="Decrease">−</button><input type="number" id="pos-y" value="0" step="1" ><button type="button" data-st="pos-y" data-d="1" aria-label="Increase">+</button></span></div>
@@ -445,6 +462,7 @@
           </section>
           <section class="insp-sec" title="Drag the picture on the preview to move it, scroll to zoom, double-click to reset. Saved per segment">
             <div class="insp-h">Image <span><button id="img-reset" class="insp-act">Reset</button><button id="img-all" class="insp-act" title="Use this zoom and position on every segment">Apply to all</button></span></div>
+            <div class="insp-row" style="margin-bottom:8px"><button type="button" id="img-change" class="btn" style="width:100%">Change picture…</button></div>
             <div class="insp-row">
               <div class="fld"><label for="img-zoom">Zoom %</label><span class="stepper wide"><button type="button" data-st="img-zoom" data-d="-5" aria-label="Decrease">−</button><input type="number" id="img-zoom" value="100" min="100" max="400" step="5" ><button type="button" data-st="img-zoom" data-d="5" aria-label="Increase">+</button></span></div>
               <div class="fld"><label for="img-x">X</label><span class="stepper"><button type="button" data-st="img-x" data-d="-1" aria-label="Decrease">−</button><input type="number" id="img-x" value="0" min="-50" max="50" step="1" ><button type="button" data-st="img-x" data-d="1" aria-label="Increase">+</button></span></div>
@@ -552,6 +570,8 @@
 
   </main>
 
+  <div id="confirm-ov" role="alertdialog" aria-modal="true"><div id="confirm-box"><p id="confirm-msg"></p><div class="row"><button class="btn" id="confirm-no">Cancel</button><button class="btn btn-danger" id="confirm-yes">Confirm</button></div></div></div>
+  <div id="img-ov" role="dialog" aria-modal="true" aria-label="Choose a picture"><div id="img-box"><div class="flex items-center justify-between" style="margin-bottom:12px"><h2 class="text-sm font-semibold" style="color:var(--t1)">Choose a picture for this segment</h2><span class="flex gap-2"><button class="btn" id="img-upload">Upload new…</button><button class="btn btn-quiet" id="img-close">Close</button></span></div><div id="img-grid"></div><input type="file" id="img-file" accept="image/*" class="hidden"></div></div>
   <!-- Settings dialog -->
   <dialog id="settings-dialog">
     <div class="flex items-center justify-between px-5 py-4 sticky top-0 z-10" style="background:var(--s1); border-bottom:1px solid var(--line)">
@@ -599,6 +619,8 @@
         <div class="anim-grid" id="anim-grid"><button type="button" class="anim-tile" data-v="fade" aria-pressed="false">Fade</button><button type="button" class="anim-tile" data-v="zoom" aria-pressed="false">Zoom in</button><button type="button" class="anim-tile" data-v="zoom-out" aria-pressed="false">Zoom out</button><button type="button" class="anim-tile" data-v="pan-left" aria-pressed="false">Pan left</button><button type="button" class="anim-tile" data-v="pan-right" aria-pressed="false">Pan right</button><button type="button" class="anim-tile" data-v="drift-up" aria-pressed="false">Drift up</button><button type="button" class="anim-tile" data-v="drift-down" aria-pressed="false">Drift down</button><button type="button" class="anim-tile" data-v="none" aria-pressed="false">None</button></div>
         <select id="select-transition" class="hidden"><option value="fade">Fade</option><option value="zoom">Zoom in</option><option value="zoom-out">Zoom out</option><option value="pan-left">Pan left</option><option value="pan-right">Pan right</option><option value="drift-up">Drift up</option><option value="drift-down">Drift down</option><option value="none">None</option></select>
         <div class="set-hint">Applies to the preview and the exported video. Text moves with the image</div></div>
+      <div class="set-row"><div><div class="set-label">Transition speed</div><div class="set-hint">Fade length between scenes, in seconds. Lower is faster</div></div><span class="flex items-center gap-2"><input type="range" id="set-transdur" min="0.05" max="1" step="0.05" class="slider" style="width:110px" aria-label="Transition duration"><span id="set-transdur-n" class="tabular-nums" style="min-width:34px;text-align:right;color:var(--t1)">0.20s</span></span></div>
+      <div class="set-row"><div><div class="set-label">Opening title zoom</div><div class="set-hint">The first slide's text grows smoothly into place</div></div><button class="switch" id="sw-titlezoom" role="switch" aria-checked="true"></button></div>
     </div>
     <div class="set-section flex justify-end"><button class="btn btn-quiet" id="set-reset">Reset appearance and guides</button></div>
   </dialog>
@@ -656,8 +678,13 @@
       const mode = document.getElementById('select-transition')?.value || 'fade';
       layer.classList.remove('anim-fade', 'anim-zoom', 'anim-zoom-out', 'anim-pan-left', 'anim-pan-right', 'anim-drift-up', 'anim-drift-down');
       if (mode === 'none') return;
+      layer.style.animationDuration = Math.round(prefs.transDur * 1000 * 1.5) + 'ms';
       void layer.offsetWidth;
       layer.classList.add('anim-' + mode);
+    }
+    function playTitleZoom() {
+      canvasTextEl.classList.remove('title-zoom');
+      if (prefs.titleZoom && currentIndex === 0) { void canvasTextEl.offsetWidth; canvasTextEl.classList.add('title-zoom'); }
     }
 
     // Keep the local server alive while this UI is active.
@@ -676,12 +703,26 @@
     sendHeartbeat();
     setInterval(sendHeartbeat, 10000);
 
+    function askConfirm(msg, yesLabel) {
+      return new Promise((resolve) => {
+        const ov = document.getElementById('confirm-ov');
+        document.getElementById('confirm-msg').textContent = msg;
+        const yes = document.getElementById('confirm-yes'), no = document.getElementById('confirm-no');
+        yes.textContent = yesLabel || 'Confirm';
+        const done = (v) => { ov.classList.remove('open'); yes.onclick = no.onclick = null; document.removeEventListener('keydown', key, true); resolve(v); };
+        const key = (e) => { if (e.key === 'Escape') done(false); else if (e.key === 'Enter') done(true); };
+        yes.onclick = () => done(true); no.onclick = () => done(false);
+        document.addEventListener('keydown', key, true);
+        ov.classList.add('open'); yes.focus();
+      });
+    }
+
     let appClosing = false;
 
     async function quitApp() {
       if (appClosing) return;
 
-      if (!confirm('Quit Dhamma Studio? An active render will be allowed to finish first.')) {
+      if (!(await askConfirm('Quit Dhamma Studio? An active render will be allowed to finish first.', 'Quit'))) {
         return;
       }
 
@@ -910,6 +951,7 @@
       if (!files || files.length === 0) return;
 
       const btn = document.getElementById('btn-folder-choose');
+      const previousLabel = btn.innerHTML;
       btn.innerText = `Uploading ${files.length} images...`;
 
       const formData = new FormData();
@@ -919,7 +961,11 @@
 
       const res = await fetch(API_BASE + '/api/upload_images_folder', { method: 'POST', body: formData });
       const data = await res.json();
-      if (data.success) {
+      folderInput.value = '';   // lets the same folder be picked again
+      if (!data.success) {
+        btn.innerHTML = previousLabel;   // the earlier folder is still the active one
+        toast(data.error || 'Could not load images', 'error');
+      } else {
         btn.innerText = `${data.count} Images Ready`;
         btn.classList.add('border-emerald-600', 'text-emerald-400');
         
@@ -1210,7 +1256,7 @@
 
     async function deleteSegment(idx) {
       if (rows.length <= 1) { toast('Keep at least one segment.', 'error'); return; }
-      if (!confirm(`Delete segment #${idx + 1}?`)) return;
+      if (!(await askConfirm(`Delete segment #${idx + 1}?`, 'Delete'))) return;
       rows.splice(idx, 1);
       currentIndex = Math.max(0, Math.min(currentIndex > idx ? currentIndex - 1 : currentIndex, rows.length - 1));
       splitOpenIdx = -1;
@@ -1433,6 +1479,7 @@
       currentIndex = idx;
       renderTimeline();
       const r = rows[idx];
+      if (typeof loadSegPos === 'function') loadSegPos();
 
       if (!isEditing) {
         // Gentle fade-out, content swap, then fade-in.
@@ -1463,6 +1510,7 @@
       }
 
       playSceneAnimation();
+      playTitleZoom();
 
       const canvasBg = document.getElementById('canvas-bg');
       const canvasBgBlur = document.getElementById('canvas-bg-blur');
@@ -1570,10 +1618,12 @@
       formData.append('letter_spacing', document.getElementById('gen-letter-spacing').value);
       formData.append('opacity', document.getElementById('gen-opacity').value);
       formData.append('transition', document.getElementById('select-transition')?.value || 'fade');
+      formData.append('transition_dur', prefs.transDur);
+      formData.append('title_zoom', prefs.titleZoom ? 'true' : 'false');
       formData.append('enable_bgm', document.getElementById('check-enable-bgm').checked);
       formData.append('target_lang', document.getElementById('select-target-lang')?.value || '');
-      formData.append('text_dx', textPos.dx);
-      formData.append('text_dy', textPos.dy);
+      formData.append('text_dx', gPos.dx);
+      formData.append('text_dy', gPos.dy);
       formData.append('text_align_h', textPos.h || 'center');
       formData.append('text_align_v', textPos.v || 'middle');
       formData.append('logo_dx', logoPos.dx);
@@ -1653,11 +1703,15 @@
       document.getElementById('sw-guides').setAttribute('aria-checked', String(prefs.showGuides));
       document.getElementById('sw-snap').setAttribute('aria-checked', String(prefs.snap));
       document.getElementById('sw-grid').setAttribute('aria-checked', String(prefs.alwaysGrid));
+      document.getElementById('sw-titlezoom').setAttribute('aria-checked', String(prefs.titleZoom));
+      document.getElementById('set-transdur').value = prefs.transDur;
+      document.getElementById('set-transdur-n').textContent = Number(prefs.transDur).toFixed(2) + 's';
     }
     document.querySelectorAll('#seg-theme button').forEach(b => b.onclick = () => { prefs.theme = b.dataset.v; savePrefs(); });
     document.querySelectorAll('#seg-size button').forEach(b => b.onclick = () => { prefs.size = b.dataset.v; savePrefs(); requestAnimationFrame(applyTextPos); });
     document.getElementById('set-font').onchange = (e) => { prefs.font = e.target.value; savePrefs(); };
-    [['sw-guides','showGuides'],['sw-snap','snap'],['sw-grid','alwaysGrid']].forEach(([id, key]) => {
+    document.getElementById('set-transdur').oninput = (e) => { prefs.transDur = Number(e.target.value); savePrefs(); };
+    [['sw-guides','showGuides'],['sw-snap','snap'],['sw-grid','alwaysGrid'],['sw-titlezoom','titleZoom']].forEach(([id, key]) => {
       document.getElementById(id).onclick = () => { prefs[key] = !prefs[key]; savePrefs(); };
     });
     document.getElementById('set-reset').onclick = () => { prefs = Object.assign({}, DEFAULT_PREFS); savePrefs(); };
@@ -1672,6 +1726,47 @@
     document.querySelectorAll('.anim-tile').forEach(t => t.onclick = () => { animSel.value = t.dataset.v; syncAnimTiles(); playSceneAnimation(); });
     animSel.value = 'fade'; syncAnimTiles();
     matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (prefs.theme === 'system') applyPrefs(prefs); });
+
+    // ---- Change a segment's background picture ----
+    const apiUrl = (p) => (typeof API_BASE !== 'undefined' ? API_BASE : '') + p;
+    async function openImagePicker() {
+      const r = rows[currentIndex]; if (!r) { toast('Load an Excel first.', 'error'); return; }
+      const grid = document.getElementById('img-grid');
+      grid.innerHTML = '<span class="set-hint">Loading…</span>';
+      document.getElementById('img-ov').classList.add('open');
+      let names = [];
+      try { names = (await (await fetch(apiUrl('/api/list_images'))).json()).images || []; } catch (e) {}
+      grid.innerHTML = '';
+      if (!names.length) { grid.innerHTML = '<span class="set-hint">No pictures yet. Upload one.</span>'; return; }
+      const cur = decodeURIComponent((r.matched_img || '').split('/').pop());
+      names.forEach(n => {
+        const b = document.createElement('button'); b.type = 'button'; b.title = n;
+        b.setAttribute('aria-pressed', String(n === cur));
+        const im = document.createElement('img'); im.loading = 'lazy'; im.src = apiUrl('/api/get_image/' + encodeURIComponent(n)); im.alt = n;
+        b.appendChild(im); b.onclick = () => pickImage(n); grid.appendChild(b);
+      });
+    }
+    async function pickImage(name) {
+      const r = rows[currentIndex]; if (!r) return;
+      r.matched_img = '/api/get_image/' + encodeURIComponent(name);
+      r.is_manual_img = true;
+      document.getElementById('img-ov').classList.remove('open');
+      await persistRows();
+      selectSegment(currentIndex, false);
+    }
+    document.getElementById('img-change').onclick = openImagePicker;
+    document.getElementById('img-close').onclick = () => document.getElementById('img-ov').classList.remove('open');
+    document.getElementById('img-ov').addEventListener('mousedown', (e) => { if (e.target.id === 'img-ov') e.currentTarget.classList.remove('open'); });
+    document.getElementById('img-upload').onclick = () => document.getElementById('img-file').click();
+    document.getElementById('img-file').onchange = async (e) => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      const fd = new FormData(); fd.append('file', f);
+      try {
+        const d = await (await fetch(apiUrl('/api/upload_image'), { method: 'POST', body: fd })).json();
+        if (!d.success) throw new Error(d.error || 'Upload failed');
+        await pickImage(d.name);
+      } catch (err) { toast(String(err.message || err), 'error'); }
+    };
 
     // ---- Movable subtitle with guides and measurements ----
     let textPos = { dx: 0, dy: 0 };      // offset from center, as a fraction of the frame
@@ -1718,7 +1813,32 @@
       if (document.activeElement !== ix) ix.value = Math.round(textPos.dx * ow);
       if (document.activeElement !== iy) iy.value = Math.round(textPos.dy * oh);
     }
-    function savePos() { try { localStorage.setItem('dhamma.textPos', JSON.stringify(textPos)); } catch (e) {} }
+    // ---- Per-segment vs all-segments text position ----
+    let posScope = localStorage.getItem('dhamma.posScope') || 'segment';
+    let gPos = { dx: textPos.dx || 0, dy: textPos.dy || 0 };
+    function loadSegPos() {
+      const r = rows[currentIndex];
+      const own = r && r.text_dx != null && r.text_dy != null;
+      textPos.dx = own ? r.text_dx : gPos.dx;
+      textPos.dy = own ? r.text_dy : gPos.dy;
+      applyTextPos();
+    }
+    function savePos2() { try { localStorage.setItem('dhamma.textPos', JSON.stringify({ dx: gPos.dx, dy: gPos.dy, h: textPos.h, v: textPos.v })); } catch (e) {} clearTimeout(window.__posPersist); window.__posPersist = setTimeout(persistRows, 250); }
+    function syncScopeUI() {
+      document.querySelectorAll('#seg-pos-scope button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === posScope)));
+    }
+    document.querySelectorAll('#seg-pos-scope button').forEach(b => b.onclick = () => { posScope = b.dataset.v; localStorage.setItem('dhamma.posScope', posScope); syncScopeUI(); });
+    syncScopeUI();
+    function savePos() {
+      if (posScope === 'segment' && rows[currentIndex]) {
+        rows[currentIndex].text_dx = r1(textPos.dx * 10000) / 10000; rows[currentIndex].text_dy = r1(textPos.dy * 10000) / 10000;
+      } else {
+        gPos = { dx: textPos.dx, dy: textPos.dy };
+        rows.forEach(r => { delete r.text_dx; delete r.text_dy; });
+      }
+      try { localStorage.setItem('dhamma.textPos', JSON.stringify({ dx: gPos.dx, dy: gPos.dy, h: textPos.h, v: textPos.v })); } catch (e) {}
+      if (rows.length) { clearTimeout(window.__posPersist); window.__posPersist = setTimeout(persistRows, 250); }
+    }
     function renderMeasure(snapX, snapY) {
       const vp = vpEl.getBoundingClientRect(), r = activeT.rect(), [ow, oh] = outSize(), k = ow / vp.width;
       guideEls.v.forEach((d, i) => d.classList.toggle('on', snapX === i));
@@ -1783,7 +1903,7 @@
     const endDrag = () => { if (!dragState) return; dragState = null; document.body.classList.remove('dragging-text'); activeT.save(); showMeasure(false); };
     handleEl.addEventListener('pointerup', endDrag);
     handleEl.addEventListener('pointercancel', endDrag);
-    handleEl.addEventListener('dblclick', () => { textPos = { dx: 0, dy: 0, h: textPos.h, v: textPos.v }; savePos(); applyTextPos(); });
+    handleEl.addEventListener('dblclick', () => document.getElementById('pos-reset').click());
     handleEl.addEventListener('keydown', (e) => {
       const step = e.shiftKey ? 10 : 1, [ow, oh] = outSize();
       const m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
@@ -1800,8 +1920,8 @@
       document.querySelectorAll('#seg-align-h button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === (textPos.h || 'center'))));
       document.querySelectorAll('#seg-align-v button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === (textPos.v || 'middle'))));
     }
-    document.querySelectorAll('#seg-align-h button').forEach(b => b.onclick = () => { textPos.h = b.dataset.v; savePos(); applyTextPos(); });
-    document.querySelectorAll('#seg-align-v button').forEach(b => b.onclick = () => { textPos.v = b.dataset.v; savePos(); applyTextPos(); });
+    document.querySelectorAll('#seg-align-h button').forEach(b => b.onclick = () => { textPos.h = b.dataset.v; savePos2(); applyTextPos(); });
+    document.querySelectorAll('#seg-align-v button').forEach(b => b.onclick = () => { textPos.v = b.dataset.v; savePos2(); applyTextPos(); });
 
     function onPosField() {
       const [ow, oh] = outSize();
@@ -1810,7 +1930,7 @@
       applyTextPos(); savePos();
     }
     ['pos-x', 'pos-y'].forEach(id => { const el = document.getElementById(id); el.oninput = onPosField; el.onkeydown = (e) => e.stopPropagation(); el.onblur = applyTextPos; });
-    document.getElementById('pos-reset').onclick = () => { textPos = { dx: 0, dy: 0, h: textPos.h, v: textPos.v }; savePos(); applyTextPos(); };
+    document.getElementById('pos-reset').onclick = () => { if (posScope === 'segment' && rows[currentIndex]) { delete rows[currentIndex].text_dx; delete rows[currentIndex].text_dy; savePos2(); loadSegPos(); } else { textPos.dx = 0; textPos.dy = 0; savePos(); applyTextPos(); } };
     document.getElementById('select-quality').addEventListener('change', applyTextPos);
     new ResizeObserver(applyTextPos).observe(vpEl);
     buildGuides(); syncSettingsUI(); updateGuideVisibility(); applyTextPos();
