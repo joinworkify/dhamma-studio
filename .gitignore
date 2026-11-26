@@ -17,3 +17,6 @@ data/
 output_renders/
 dist/
 build/
+.cottontail-tmp/
+.hutch/
+models/

@@ -1,0 +1,116 @@
+name: build
+
+# Builds Dhamma Studio (PyInstaller backend + Electrobun shell) for macOS, Windows and Linux.
+#   - Push a tag like `v0.5.1`: builds all three and attaches installers to a GitHub Release.
+#   - Manual run (Actions tab -> build -> Run workflow): builds all three; download from the run's artifacts.
+# Commits and pull requests do NOT trigger a build.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the release on tags
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The macOS build targets Apple Silicon only (see dhamma_studio.spec).
+          - { os: macos-latest, name: macos-arm64 }
+          - { os: windows-latest, name: windows-x64 }
+          - { os: ubuntu-latest, name: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { python-version: '3.12' }
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Free disk space (torch + PyInstaller are big)
+        if: runner.os == 'Linux'
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: System libraries (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fribidi # bundled by dhamma_studio.spec for Myanmar shaping
+      - name: System libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libfribidi0 libraqm0 libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential
+
+      - name: Install hutch (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://hutch.blackboard.sh/hutch/install.sh | sh
+          echo "$HOME/.hutch/bin" >> "$GITHUB_PATH"
+      - name: Install hutch (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & ([scriptblock]::Create((irm https://hutch.blackboard.sh/hutch/install.ps1)))
+          "$env:USERPROFILE\.hutch\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      # 1) Python backend -> dist/DhammaStudio (the Electrobun shell copies it in as a sidecar)
+      - name: Build backend (macOS)
+        if: runner.os == 'macOS'
+        run: ./scripts/build_mac.sh
+      - name: Build backend (Linux)
+        if: runner.os == 'Linux'
+        run: ./scripts/build_linux.sh
+      - name: Build backend (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/build_windows.ps1
+
+      # 2) Electrobun desktop shell
+      - name: Build desktop app (macOS)
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        run: |
+          hutch install --frozen-lockfile
+          ./scripts/package-mac.sh
+          mv artifacts/macos-arm64-DhammaStudio.dmg artifacts/DhammaStudio-macOS-arm64.dmg # name install-mac.sh downloads
+      - name: Build desktop app (Windows / Linux)
+        if: runner.os != 'macOS'
+        working-directory: desktop
+        run: |
+          hutch install --frozen-lockfile
+          hutch run build
+
+      # The *.tar.zst files are Electrobun auto-update bundles: multi-GB (they hold torch) and over the
+      # 2 GiB release-asset limit, so only installers and the small update metadata are kept.
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p out
+          cd desktop/artifacts
+          for f in *; do
+            case "$f" in *.tar.zst) ;; *) cp "$f" ../../out/ ;; esac
+          done
+          ls -lh ../../out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dhamma-studio-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # install-mac.sh is attached so the one-line installer keeps working
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*
+            scripts/install-mac.sh
+          generate_release_notes: true
