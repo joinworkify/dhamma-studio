@@ -1,8 +1,8 @@
 name: build
 
-# Builds Dhamma Studio (PyInstaller backend + Electrobun shell) for macOS, Windows and Linux.
-#   - Push a tag like `v0.5.1`: builds all three and attaches installers to a GitHub Release.
-#   - Manual run (Actions tab -> build -> Run workflow): builds all three; download from the run's artifacts.
+# Builds Dhamma Studio (PyInstaller backend + Electrobun shell) for macOS and Windows (Linux is intentionally not built: torch makes it >3 GB).
+#   - Push a tag like `v0.5.1`: builds macOS and Windows and attaches installers to a GitHub Release.
+#   - Manual run (Actions tab -> build -> Run workflow): builds macOS and Windows; download from the run's artifacts.
 # Commits and pull requests do NOT trigger a build.
 on:
   push:
@@ -21,7 +21,6 @@ jobs:
           # The macOS build targets Apple Silicon only (see dhamma_studio.spec).
           - { os: macos-latest, name: macos-arm64 }
           - { os: windows-latest, name: windows-x64 }
-          - { os: ubuntu-latest, name: linux-x64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -29,21 +28,11 @@ jobs:
         with: { python-version: '3.12' }
       - uses: oven-sh/setup-bun@v2
 
-      - name: Free disk space (torch + PyInstaller are big)
-        if: runner.os == 'Linux'
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-
       - name: System libraries (macOS)
         if: runner.os == 'macOS'
         run: brew install fribidi # bundled by dhamma_studio.spec for Myanmar shaping
-      - name: System libraries (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libfribidi0 libraqm0 libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev build-essential
-
-      - name: Install hutch (macOS / Linux)
-        if: runner.os != 'Windows'
+      - name: Install hutch (macOS)
+        if: runner.os == 'macOS'
         run: |
           curl -fsSL https://hutch.blackboard.sh/hutch/install.sh | sh
           echo "$HOME/.hutch/bin" >> "$GITHUB_PATH"
@@ -58,9 +47,6 @@ jobs:
       - name: Build backend (macOS)
         if: runner.os == 'macOS'
         run: ./scripts/build_mac.sh
-      - name: Build backend (Linux)
-        if: runner.os == 'Linux'
-        run: ./scripts/build_linux.sh
       - name: Build backend (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -74,8 +60,8 @@ jobs:
           hutch install --frozen-lockfile
           ./scripts/package-mac.sh
           mv artifacts/macos-arm64-DhammaStudio.dmg artifacts/DhammaStudio-macOS-arm64.dmg # name install-mac.sh downloads
-      - name: Build desktop app (Windows / Linux)
-        if: runner.os != 'macOS'
+      - name: Build desktop app (Windows)
+        if: runner.os == 'Windows'
         working-directory: desktop
         run: |
           hutch install --frozen-lockfile
